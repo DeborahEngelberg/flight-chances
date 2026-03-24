@@ -20,11 +20,12 @@ function RiskGauge({ percentage, label }) {
 
   // Color based on percentage
   const getColor = (pct) => {
-    if (pct < 20) return '#34d399';
-    if (pct < 35) return '#a3e635';
-    if (pct < 50) return '#fbbf24';
-    if (pct < 70) return '#fb923c';
-    return '#f87171';
+    const style = getComputedStyle(document.documentElement);
+    if (pct < 20) return style.getPropertyValue('--gauge-green').trim() || '#16a34a';
+    if (pct < 35) return style.getPropertyValue('--gauge-yellow').trim() || '#ca8a04';
+    if (pct < 50) return style.getPropertyValue('--gauge-amber').trim() || '#d97706';
+    if (pct < 70) return style.getPropertyValue('--gauge-orange').trim() || '#ea580c';
+    return style.getPropertyValue('--gauge-red').trim() || '#dc2626';
   };
 
   const color = getColor(animated);

@@ -23,9 +23,18 @@ function App() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [nextRefresh, setNextRefresh] = useState(null);
   const [activeView, setActiveView] = useState('predict'); // 'predict' | 'dashboard' | 'accuracy'
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('flightrisk_theme');
+    return saved === 'dark';
+  });
   const refreshTimer = useRef(null);
   const countdownTimer = useRef(null);
   const resultsRef = useRef(null);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
+    localStorage.setItem('flightrisk_theme', darkMode ? 'dark' : 'light');
+  }, [darkMode]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -107,10 +116,10 @@ function App() {
       <header className="header">
         <div className="header-content">
           <div className="logo">
-            <svg width="36" height="36" viewBox="0 0 36 36" fill="none" style={{ filter: 'drop-shadow(0 0 8px rgba(56,189,248,0.4))' }}>
-              <path d="M18 2L33 10V26L18 34L3 26V10L18 2Z" fill="#38bdf8" opacity="0.12"/>
-              <path d="M8 20L16 12L28 8L24 20L16 24L8 20Z" fill="#38bdf8"/>
-              <path d="M16 24L14 30L12 24" stroke="#38bdf8" strokeWidth="1.5"/>
+            <svg width="36" height="36" viewBox="0 0 36 36" fill="none" className="logo-icon">
+              <path d="M18 2L33 10V26L18 34L3 26V10L18 2Z" fill="#0ea5e9" opacity="0.15"/>
+              <path d="M8 20L16 12L28 8L24 20L16 24L8 20Z" fill="#0ea5e9"/>
+              <path d="M16 24L14 30L12 24" stroke="#0ea5e9" strokeWidth="1.5"/>
             </svg>
             <h1>Debbie's Lucky Flight Predictor</h1>
           </div>
@@ -134,7 +143,21 @@ function App() {
               Accuracy
             </button>
           </nav>
-          <p className="tagline">ML-powered flight delay & cancellation predictions with live data</p>
+          <div className="header-right">
+            <button
+              className="theme-toggle"
+              onClick={() => setDarkMode(!darkMode)}
+              title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              aria-label="Toggle theme"
+            >
+              {darkMode ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+              )}
+            </button>
+            <p className="tagline">ML-powered predictions with live data</p>
+          </div>
         </div>
       </header>
 
