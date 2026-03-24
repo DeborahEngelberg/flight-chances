@@ -7,6 +7,7 @@ import LoadingSpinner from './components/LoadingSpinner';
 import TrendCharts from './components/TrendCharts';
 import Alternatives from './components/Alternatives';
 import TripDashboard from './components/TripDashboard';
+import ValidationDashboard from './components/ValidationDashboard';
 import './App.css';
 
 const AUTO_REFRESH_INTERVAL = 120000; // 2 minutes
@@ -21,7 +22,7 @@ function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [nextRefresh, setNextRefresh] = useState(null);
-  const [activeView, setActiveView] = useState('predict'); // 'predict' | 'dashboard'
+  const [activeView, setActiveView] = useState('predict'); // 'predict' | 'dashboard' | 'accuracy'
   const refreshTimer = useRef(null);
   const countdownTimer = useRef(null);
   const resultsRef = useRef(null);
@@ -126,6 +127,12 @@ function App() {
             >
               Dashboard
             </button>
+            <button
+              className={`nav-btn ${activeView === 'accuracy' ? 'active' : ''}`}
+              onClick={() => setActiveView('accuracy')}
+            >
+              Accuracy
+            </button>
           </nav>
           <p className="tagline">ML-powered flight delay & cancellation predictions with live data</p>
         </div>
@@ -133,6 +140,10 @@ function App() {
 
       <main className="main">
         <div className="container">
+          {activeView === 'accuracy' && (
+            <ValidationDashboard />
+          )}
+
           {activeView === 'dashboard' && (
             <TripDashboard
               airlines={airlines}

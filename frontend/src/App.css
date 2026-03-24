@@ -1973,3 +1973,250 @@ body {
     height: 220px;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   VALIDATION DASHBOARD
+   ═══════════════════════════════════════════════════════════════════ */
+.validation-container {
+  animation: slideUp 0.5s ease-out;
+}
+
+.validation-header-card {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 28px;
+  margin-bottom: 20px;
+}
+
+.validation-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.validation-title-row h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--navy);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.validation-subtitle {
+  font-size: 0.82rem;
+  color: var(--gray-500);
+  margin-bottom: 20px;
+}
+
+.validate-btn {
+  padding: 8px 18px;
+  background: var(--navy);
+  color: var(--white);
+  border: none;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.validate-btn:hover:not(:disabled) {
+  background: var(--sky);
+}
+
+.validate-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.validation-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.vstat-card {
+  background: var(--gray-50);
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+}
+
+.vstat-card.highlight {
+  background: var(--sky-pale);
+  border: 1px solid rgba(14,165,233,0.2);
+}
+
+.vstat-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--navy);
+  line-height: 1.2;
+}
+
+.vstat-label {
+  font-size: 0.68rem;
+  color: var(--gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-top: 4px;
+}
+
+/* ── Empty State ── */
+.validation-empty-state {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 48px 32px;
+  text-align: center;
+}
+
+.validation-empty-icon {
+  font-size: 3rem;
+  margin-bottom: 12px;
+}
+
+.validation-empty-state h4 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--navy);
+  margin-bottom: 8px;
+}
+
+.validation-empty-state p {
+  color: var(--gray-500);
+  font-size: 0.85rem;
+  max-width: 500px;
+  margin: 0 auto 28px;
+  line-height: 1.6;
+}
+
+.validation-how-it-works {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 400px;
+  margin: 0 auto;
+  text-align: left;
+}
+
+.how-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.85rem;
+  color: var(--gray-700);
+}
+
+.how-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--sky);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* ── Chart Cards ── */
+.validation-chart-card {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 28px;
+  margin-bottom: 20px;
+}
+
+.validation-chart-card h4 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--navy);
+  margin-bottom: 4px;
+}
+
+/* ── Validation Table ── */
+.validation-table {
+  margin-top: 12px;
+}
+
+.vtable-header {
+  display: grid;
+  grid-template-columns: 60px 1fr 80px 120px 80px;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border-bottom: 2px solid var(--gray-200);
+}
+
+.vtable-row {
+  display: grid;
+  grid-template-columns: 60px 1fr 80px 120px 80px;
+  gap: 8px;
+  padding: 10px 12px;
+  font-size: 0.82rem;
+  border-bottom: 1px solid var(--gray-100);
+  align-items: center;
+  transition: background var(--transition);
+}
+
+.vtable-row:hover {
+  background: var(--gray-50);
+}
+
+.vtable-airline {
+  font-weight: 700;
+  color: var(--navy);
+}
+
+.vtable-actual {
+  font-weight: 600;
+}
+
+.vtable-actual.on_time { color: #16a34a; }
+.vtable-actual.delayed { color: #d97706; }
+.vtable-actual.cancelled { color: #dc2626; }
+
+.vtable-result {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.vtable-result.correct {
+  background: var(--green-pale);
+  color: #166534;
+}
+
+.vtable-result.incorrect {
+  background: var(--red-pale);
+  color: #991b1b;
+}
+
+@media (max-width: 768px) {
+  .validation-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .vtable-header,
+  .vtable-row {
+    grid-template-columns: 50px 1fr 60px 90px 60px;
+    font-size: 0.72rem;
+  }
+}

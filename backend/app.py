@@ -18,6 +18,10 @@ from model.train_model import FEATURE_COLS
 from realtime_intel import gather_realtime_intelligence
 from dynamic_data import get_all_dynamic_data
 from model.feature_data import AIRPORT_COORDS
+from validator import (
+    log_prediction, get_calibration_factor, get_validation_stats,
+    validate_pending_predictions, start_background_validator
+)
 
 FRONTEND_BUILD = os.path.join(os.path.dirname(__file__), "..", "frontend", "build")
 
@@ -206,6 +210,16 @@ def predict():
     delay_prob = min(delay_prob + total_delay_boost, 0.85)
     cancel_prob = min(cancel_prob + total_cancel_boost, 0.35)
 
+    # ═══════════════════════════════════════════════════════════════
+    # LAYER 4: CALIBRATION — Learn from past prediction accuracy
+    # ═══════════════════════════════════════════════════════════════
+    calibration = get_calibration_factor(
+        airline_code=airline_code, origin=origin,
+        hour=hour, month=month
+    )
+    delay_prob = float(np.clip(delay_prob * calibration, 0.01, 0.95))
+    cancel_prob = float(np.clip(cancel_prob * calibration, 0.001, 0.50))
+
     # Determine risk level
     combined_risk = delay_prob * 0.7 + cancel_prob * 0.3 * 5
     if combined_risk < 0.20:
@@ -274,6 +288,21 @@ def predict():
     if dynamic["origin_faa"]["is_live"]:
         live_sources.append("FAA Airport Status")
     live_sources.append(f"News & Social Media ({intel['sources_checked']} queries)")
+    if calibration != 1.0:
+        live_sources.append(f"Self-Calibration (factor: {calibration:.2f})")
+
+    # Log prediction for future validation
+    flight_code = data.get("flight_code")
+    try:
+        log_prediction(
+            airline_code=airline_code, origin=origin, destination=destination,
+            flight_date=date_str, departure_time=time_str,
+            delay_pct=round(delay_prob * 100, 1),
+            cancel_pct=round(cancel_prob * 100, 1),
+            risk_level=risk_level, flight_code=flight_code,
+        )
+    except Exception as e:
+        print(f"[validator] Failed to log prediction: {e}")
 
     return jsonify({
         "delay_probability": round(delay_prob * 100, 1),
@@ -343,6 +372,14 @@ def predict():
             },
             "weather_delay_impact": f"+{dynamic['delay_modifier']*100:.1f}%",
             "faa_delay_impact": f"+{dynamic.get('faa_severity', 0)*60:.1f}%",
+        },
+        "calibration": {
+            "factor": calibration,
+            "applied": calibration != 1.0,
+            "description": (
+                f"Predictions adjusted by {calibration:.2f}x based on past accuracy"
+                if calibration != 1.0 else "No calibration data yet — predictions improve as flights are validated"
+            ),
         },
     })
 
@@ -687,6 +724,24 @@ def get_alternatives():
             "risk_factor": round(current_h_factor, 2),
         }
     })
+
+
+@app.route("/api/validation/stats", methods=["GET"])
+def validation_stats():
+    """Get prediction validation statistics and calibration data."""
+    stats = get_validation_stats()
+    return jsonify(stats)
+
+
+@app.route("/api/validation/trigger", methods=["POST"])
+def trigger_validation():
+    """Manually trigger validation of pending predictions."""
+    validated = validate_pending_predictions()
+    return jsonify({"validated": validated, "message": f"Validated {validated} predictions"})
+
+
+# Start background validator when app starts
+start_background_validator(interval_minutes=30)
 
 
 if __name__ == "__main__":
