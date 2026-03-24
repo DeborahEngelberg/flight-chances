@@ -200,32 +200,38 @@ function ValidationDashboard() {
           <div className="vstat-card">
             <div className="vstat-value">{stats.total_predictions}</div>
             <div className="vstat-label">Total Predictions</div>
+            <div className="vstat-tooltip">How many flight predictions have been made in total</div>
           </div>
           <div className="vstat-card">
             <div className="vstat-value">{stats.validated}</div>
             <div className="vstat-label">Validated</div>
+            <div className="vstat-tooltip">Predictions where we checked the actual flight outcome</div>
           </div>
           <div className="vstat-card">
             <div className="vstat-value">{stats.pending_validation}</div>
             <div className="vstat-label">Pending</div>
+            <div className="vstat-tooltip">Flights that haven't departed yet — we'll check these automatically</div>
           </div>
           <div className="vstat-card highlight">
             <div className="vstat-value">
               {stats.accuracy !== null ? `${stats.accuracy}%` : '--'}
             </div>
             <div className="vstat-label">Accuracy</div>
+            <div className="vstat-tooltip">How often we were directionally correct — predicted high risk and the flight was delayed, or predicted low risk and it was on time</div>
           </div>
           <div className="vstat-card">
             <div className="vstat-value">
               {stats.avg_error !== null ? `${stats.avg_error}%` : '--'}
             </div>
             <div className="vstat-label">Avg Error</div>
+            <div className="vstat-tooltip">The average difference between what we predicted and what actually happened. For example, if we predicted 40% delay but it was on time (0%), the error is 40%. Lower is better.</div>
           </div>
           <div className="vstat-card">
             <div className="vstat-value">
               {stats.delay_accuracy !== null ? `${stats.delay_accuracy}%` : '--'}
             </div>
             <div className="vstat-label">Delay Detection</div>
+            <div className="vstat-tooltip">Of flights that were actually delayed, how often did we correctly predict high risk (above 30%)</div>
           </div>
         </div>
       </div>
