@@ -114,6 +114,135 @@ def log_prediction(airline_code, origin, destination, flight_date,
     conn.close()
 
 
+def check_live_flight_status(flight_code, flight_date):
+    """
+    Check current status of a flight that hasn't departed yet.
+    Returns real-time delay info from AviationStack.
+    """
+    if not AVIATIONSTACK_KEY or not flight_code:
+        return None
+
+    try:
+        url = (
+            f"http://api.aviationstack.com/v1/flights?"
+            f"access_key={AVIATIONSTACK_KEY}"
+            f"&flight_iata={flight_code}"
+            f"&flight_date={flight_date}"
+        )
+        resp = requests.get(url, timeout=10)
+        if resp.status_code != 200:
+            return None
+
+        data = resp.json()
+        flights = data.get("data", [])
+        if not flights:
+            return None
+
+        flight = flights[0]
+        departure = flight.get("departure", {})
+        status = flight.get("flight_status", "unknown")
+
+        scheduled = departure.get("scheduled", "")
+        estimated = departure.get("estimated", "")
+        actual = departure.get("actual", "")
+        delay = departure.get("delay") or 0
+        gate = departure.get("gate", "")
+        terminal = departure.get("terminal", "")
+
+        # Parse times for display
+        sched_time = scheduled[-8:-3] if len(scheduled) >= 8 else ""
+        est_time = estimated[-8:-3] if len(estimated) >= 8 else ""
+        actual_time = actual[-8:-3] if len(actual) >= 8 else ""
+
+        return {
+            "flight_code": flight_code,
+            "status": status,
+            "scheduled_time": sched_time,
+            "estimated_time": est_time or sched_time,
+            "actual_time": actual_time,
+            "delay_minutes": delay,
+            "is_delayed": delay > 0,
+            "gate": gate,
+            "terminal": terminal,
+            "updated": True,
+        }
+    except Exception as e:
+        print(f"[validator] Live status check failed for {flight_code}: {e}")
+        return None
+
+
+def check_and_update_live_flights():
+    """
+    Check live status for flights departing today that have flight codes.
+    If a flight is delayed, record it for training data.
+    Called periodically by background thread.
+    """
+    conn = get_db()
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+
+    # Find today's predictions that have flight codes and haven't been finalized
+    rows = conn.execute("""
+        SELECT id, flight_code, flight_date, departure_time, airline_code,
+               origin, destination, predicted_delay_pct
+        FROM predictions
+        WHERE actual_status IS NULL
+          AND flight_code IS NOT NULL
+          AND flight_date = ?
+    """, (today,)).fetchall()
+
+    updated = 0
+    for row in rows:
+        status = check_live_flight_status(row["flight_code"], row["flight_date"])
+        if not status:
+            continue
+
+        # If the flight has actually departed or been cancelled, record the outcome
+        if status["status"] in ("active", "landed"):
+            delay_min = status["delay_minutes"]
+            is_delayed = 1 if delay_min > 15 else 0
+            actual_status = "delayed" if is_delayed else "on_time"
+            prediction_error = row["predicted_delay_pct"] / 100.0 - (1.0 if is_delayed else 0.0)
+
+            conn.execute("""
+                UPDATE predictions SET
+                    actual_delayed = ?,
+                    actual_cancelled = 0,
+                    actual_delay_minutes = ?,
+                    actual_status = ?,
+                    outcome_source = 'aviationstack',
+                    validated_at = datetime('now'),
+                    prediction_error = ?
+                WHERE id = ?
+            """, (is_delayed, delay_min, actual_status, prediction_error, row["id"]))
+            updated += 1
+            print(f"[validator] Flight {row['flight_code']}: {actual_status} (delay: {delay_min}min)")
+
+        elif status["status"] == "cancelled":
+            prediction_error = row["predicted_delay_pct"] / 100.0 - 1.0
+            conn.execute("""
+                UPDATE predictions SET
+                    actual_delayed = 0,
+                    actual_cancelled = 1,
+                    actual_delay_minutes = 0,
+                    actual_status = 'cancelled',
+                    outcome_source = 'aviationstack',
+                    validated_at = datetime('now'),
+                    prediction_error = ?
+                WHERE id = ?
+            """, (prediction_error, row["id"]))
+            updated += 1
+            print(f"[validator] Flight {row['flight_code']}: cancelled")
+
+    conn.commit()
+    conn.close()
+
+    if updated > 0:
+        print(f"[validator] Updated {updated} live flight outcomes")
+        update_calibration()
+
+    return updated
+
+
 # ═══════════════════════════════════════════════════════════════════
 # OUTCOME CHECKING
 # ═══════════════════════════════════════════════════════════════════
@@ -556,10 +685,10 @@ _validator_thread = None
 
 
 def start_background_validator(interval_minutes=30):
-    """Start a background thread that periodically validates predictions."""
+    """Start background threads for validation and live flight monitoring."""
     global _validator_thread
 
-    def _run():
+    def _run_validator():
         while True:
             try:
                 validate_pending_predictions()
@@ -567,9 +696,23 @@ def start_background_validator(interval_minutes=30):
                 print(f"[validator] Background validation error: {e}")
             time.sleep(interval_minutes * 60)
 
-    _validator_thread = threading.Thread(target=_run, daemon=True)
+    def _run_live_checker():
+        """Check live flight status every 10 minutes for today's flights."""
+        while True:
+            try:
+                check_and_update_live_flights()
+            except Exception as e:
+                print(f"[validator] Live flight check error: {e}")
+            time.sleep(600)  # Every 10 minutes
+
+    _validator_thread = threading.Thread(target=_run_validator, daemon=True)
     _validator_thread.start()
+
+    _live_thread = threading.Thread(target=_run_live_checker, daemon=True)
+    _live_thread.start()
+
     print(f"[validator] Background validator started (every {interval_minutes}min)")
+    print(f"[validator] Live flight checker started (every 10min)")
 
 
 # Initialize DB on import

@@ -20,7 +20,8 @@ from dynamic_data import get_all_dynamic_data
 from model.feature_data import AIRPORT_COORDS
 from validator import (
     log_prediction, get_calibration_factor, get_validation_stats,
-    validate_pending_predictions, start_background_validator
+    validate_pending_predictions, start_background_validator,
+    check_live_flight_status
 )
 from alerts import (
     subscribe, track_flight, untrack_flight, get_tracked_flights,
@@ -745,6 +746,20 @@ def trigger_validation():
     """Manually trigger validation of pending predictions."""
     validated = validate_pending_predictions()
     return jsonify({"validated": validated, "message": f"Validated {validated} predictions"})
+
+
+@app.route("/api/flight-status", methods=["POST"])
+def live_flight_status():
+    """Check live status of a flight — is it delayed from its scheduled time?"""
+    data = request.json or {}
+    flight_code = data.get("flight_code", "")
+    flight_date = data.get("date", "")
+    if not flight_code:
+        return jsonify({"error": "flight_code required"}), 400
+    status = check_live_flight_status(flight_code, flight_date)
+    if not status:
+        return jsonify({"updated": False, "message": "Unable to check live status — flight may not be in the system yet"})
+    return jsonify(status)
 
 
 # ═══════════════════════════════════════════════════════════════════

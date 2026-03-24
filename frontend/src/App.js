@@ -11,6 +11,7 @@ import ValidationDashboard from './components/ValidationDashboard';
 import ConnectionAnalyzer from './components/ConnectionAnalyzer';
 import AircraftTimeline from './components/AircraftTimeline';
 import AlertCenter from './components/AlertCenter';
+import LiveFlightStatus from './components/LiveFlightStatus';
 import './App.css';
 
 const AUTO_REFRESH_INTERVAL = 120000; // 2 minutes
@@ -231,6 +232,12 @@ function App() {
                       refreshing={refreshing}
                       onManualRefresh={() => silentRefresh(lastFormData)}
                     />
+                    {lastFormData?.flight_code && (
+                      <LiveFlightStatus
+                        flightCode={lastFormData.flight_code}
+                        flightDate={lastFormData.date}
+                      />
+                    )}
                     <ResultsDisplay results={results} />
                     {lastFormData?.flight_code && (
                       <AircraftTimeline
