@@ -22,6 +22,13 @@ from validator import (
     log_prediction, get_calibration_factor, get_validation_stats,
     validate_pending_predictions, start_background_validator
 )
+from alerts import (
+    subscribe, track_flight, untrack_flight, get_tracked_flights,
+    get_alert_history, get_unread_count, mark_alerts_read,
+    start_alert_checker
+)
+from connections import analyze_connection_risk, track_aircraft
+from bts_data import get_enhanced_trends, get_route_history
 
 FRONTEND_BUILD = os.path.join(os.path.dirname(__file__), "..", "frontend", "build")
 
@@ -740,8 +747,160 @@ def trigger_validation():
     return jsonify({"validated": validated, "message": f"Validated {validated} predictions"})
 
 
-# Start background validator when app starts
+# ═══════════════════════════════════════════════════════════════════
+# ALERT ENDPOINTS
+# ═══════════════════════════════════════════════════════════════════
+
+@app.route("/api/alerts/subscribe", methods=["POST"])
+def alert_subscribe():
+    data = request.json or {}
+    sub_id = subscribe(email=data.get("email"), push_endpoint=data.get("push_endpoint"))
+    return jsonify({"subscription_id": sub_id})
+
+
+@app.route("/api/alerts/track", methods=["POST"])
+def alert_track():
+    data = request.json or {}
+    sub_id = data.get("subscription_id")
+    if not sub_id:
+        return jsonify({"error": "subscription_id required"}), 400
+    track_id = track_flight(
+        sub_id, data.get("airline", ""), data.get("origin", ""),
+        data.get("destination", ""), data.get("date", ""),
+        data.get("departure_time", ""), data.get("flight_code")
+    )
+    return jsonify({"track_id": track_id})
+
+
+@app.route("/api/alerts/untrack/<int:track_id>", methods=["POST"])
+def alert_untrack(track_id):
+    untrack_flight(track_id)
+    return jsonify({"success": True})
+
+
+@app.route("/api/alerts/flights/<int:sub_id>", methods=["GET"])
+def alert_flights(sub_id):
+    return jsonify(get_tracked_flights(sub_id))
+
+
+@app.route("/api/alerts/history/<int:sub_id>", methods=["GET"])
+def alert_history_endpoint(sub_id):
+    return jsonify({
+        "alerts": get_alert_history(sub_id),
+        "unread_count": get_unread_count(sub_id),
+    })
+
+
+@app.route("/api/alerts/read/<int:sub_id>", methods=["POST"])
+def alert_mark_read(sub_id):
+    mark_alerts_read(sub_id)
+    return jsonify({"success": True})
+
+
+# ═══════════════════════════════════════════════════════════════════
+# CONNECTION RISK ENDPOINT
+# ═══════════════════════════════════════════════════════════════════
+
+@app.route("/api/connection-risk", methods=["POST"])
+def connection_risk():
+    """Analyze connection risk for multi-leg itinerary."""
+    data = request.json or {}
+    legs = data.get("legs", [])
+    if len(legs) < 2:
+        return jsonify({"error": "Need at least 2 flight legs"}), 400
+    result = analyze_connection_risk(legs)
+    return jsonify(result)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# AIRCRAFT TRACKING ENDPOINT
+# ═══════════════════════════════════════════════════════════════════
+
+@app.route("/api/aircraft-track", methods=["POST"])
+def aircraft_track_endpoint():
+    """Track the aircraft assigned to a flight."""
+    data = request.json or {}
+    flight_code = data.get("flight_code", "")
+    flight_date = data.get("date", "")
+    if not flight_code:
+        return jsonify({"error": "flight_code required"}), 400
+    result = track_aircraft(flight_code, flight_date)
+    return jsonify(result)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# BTS ENHANCED TRENDS ENDPOINT
+# ═══════════════════════════════════════════════════════════════════
+
+@app.route("/api/trends/bts", methods=["POST"])
+def bts_trends():
+    """Get real BTS historical data for trend charts."""
+    data = request.json or {}
+    carrier = data.get("airline", "").upper()
+    origin = data.get("origin", "").upper()
+    destination = data.get("destination", "").upper()
+    result = get_enhanced_trends(carrier, origin, destination)
+    return jsonify(result)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# PREDICT FOR ALERT (internal helper)
+# ═══════════════════════════════════════════════════════════════════
+
+def predict_for_alert(airline_code, origin, destination, date_str, time_str):
+    """Run prediction without HTTP context — used by alert checker."""
+    if delay_model is None or cancel_model is None:
+        return None
+    if airline_code not in AIRLINE_DATA or origin not in AIRPORT_DATA or destination not in AIRPORT_DATA:
+        return None
+    try:
+        date = datetime.strptime(date_str, "%Y-%m-%d")
+        hour = int(time_str.split(":")[0])
+    except (ValueError, TypeError, IndexError):
+        return None
+
+    month = date.month
+    day_of_week = date.weekday()
+    day_of_month = date.day
+    al = AIRLINE_DATA[airline_code]
+    orig = AIRPORT_DATA[origin]
+    dst = AIRPORT_DATA[destination]
+    dist = compute_distance(origin, destination)
+    m_factor = MONTH_DELAY_FACTOR[month]
+    d_factor = DAY_DELAY_FACTOR[day_of_week]
+    h_factor = get_hour_delay_factor(hour)
+    is_hol = 1 if is_holiday_period(month, day_of_month) else 0
+    airlines_list = list(AIRLINE_DATA.keys())
+
+    features = np.array([[
+        airlines_list.index(airline_code), al["on_time_rate"], al["cancel_rate"],
+        orig["congestion"], orig["delay_rate"], dst["congestion"], dst["delay_rate"],
+        month, day_of_week, hour, is_hol, dist / 1000.0, m_factor, d_factor, h_factor,
+    ]])
+
+    delay_prob = float(np.clip(delay_model.predict(features)[0], 0, 1))
+    cancel_prob = float(np.clip(cancel_model.predict(features)[0], 0, 1))
+
+    calibration = get_calibration_factor(airline_code=airline_code, origin=origin, hour=hour, month=month)
+    delay_prob = float(np.clip(delay_prob * calibration, 0.01, 0.95))
+    cancel_prob = float(np.clip(cancel_prob * calibration, 0.001, 0.50))
+
+    combined_risk = delay_prob * 0.7 + cancel_prob * 0.3 * 5
+    if combined_risk < 0.20: risk_level = "Low"
+    elif combined_risk < 0.35: risk_level = "Moderate"
+    elif combined_risk < 0.55: risk_level = "High"
+    else: risk_level = "Very High"
+
+    return {
+        "delay_probability": round(delay_prob * 100, 1),
+        "cancellation_probability": round(cancel_prob * 100, 1),
+        "risk_level": risk_level,
+    }
+
+
+# Start background services
 start_background_validator(interval_minutes=30)
+start_alert_checker(interval_minutes=5)
 
 
 if __name__ == "__main__":

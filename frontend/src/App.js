@@ -8,6 +8,9 @@ import TrendCharts from './components/TrendCharts';
 import Alternatives from './components/Alternatives';
 import TripDashboard from './components/TripDashboard';
 import ValidationDashboard from './components/ValidationDashboard';
+import ConnectionAnalyzer from './components/ConnectionAnalyzer';
+import AircraftTimeline from './components/AircraftTimeline';
+import AlertCenter from './components/AlertCenter';
 import './App.css';
 
 const AUTO_REFRESH_INTERVAL = 120000; // 2 minutes
@@ -22,7 +25,7 @@ function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [nextRefresh, setNextRefresh] = useState(null);
-  const [activeView, setActiveView] = useState('predict'); // 'predict' | 'dashboard' | 'accuracy'
+  const [activeView, setActiveView] = useState('predict'); // 'predict' | 'connections' | 'dashboard' | 'alerts' | 'accuracy'
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('flightrisk_theme');
     return saved === 'dark';
@@ -131,10 +134,22 @@ function App() {
               Predict
             </button>
             <button
+              className={`nav-btn ${activeView === 'connections' ? 'active' : ''}`}
+              onClick={() => setActiveView('connections')}
+            >
+              Connections
+            </button>
+            <button
               className={`nav-btn ${activeView === 'dashboard' ? 'active' : ''}`}
               onClick={() => setActiveView('dashboard')}
             >
               Dashboard
+            </button>
+            <button
+              className={`nav-btn ${activeView === 'alerts' ? 'active' : ''}`}
+              onClick={() => setActiveView('alerts')}
+            >
+              Alerts
             </button>
             <button
               className={`nav-btn ${activeView === 'accuracy' ? 'active' : ''}`}
@@ -165,6 +180,14 @@ function App() {
         <div className="container">
           {activeView === 'accuracy' && (
             <ValidationDashboard />
+          )}
+
+          {activeView === 'connections' && (
+            <ConnectionAnalyzer airlines={airlines} airports={airports} />
+          )}
+
+          {activeView === 'alerts' && (
+            <AlertCenter airlines={airlines} airports={airports} />
           )}
 
           {activeView === 'dashboard' && (
@@ -209,6 +232,12 @@ function App() {
                       onManualRefresh={() => silentRefresh(lastFormData)}
                     />
                     <ResultsDisplay results={results} />
+                    {lastFormData?.flight_code && (
+                      <AircraftTimeline
+                        flightCode={lastFormData.flight_code}
+                        flightDate={lastFormData.date}
+                      />
+                    )}
                     <TrendCharts formData={lastFormData} />
                     <Alternatives formData={lastFormData} />
                   </>
