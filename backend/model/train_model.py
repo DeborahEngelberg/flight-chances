@@ -17,7 +17,6 @@ Two separate models are trained:
 """
 
 import numpy as np
-import pandas as pd
 from xgboost import XGBRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, r2_score
@@ -38,29 +37,34 @@ airlines = list(AIRLINE_DATA.keys())
 airports = list(AIRPORT_DATA.keys())
 
 
+FEATURE_COLS = [
+    "airline_idx", "airline_on_time_rate", "airline_cancel_rate",
+    "origin_congestion", "origin_delay_rate",
+    "dest_congestion", "dest_delay_rate",
+    "month", "day_of_week", "departure_hour",
+    "is_holiday", "distance",
+    "month_factor", "day_factor", "hour_factor"
+]
+
+
+def _hour_distribution():
+    """Realistic departure hour distribution (more flights midday)."""
+    hours = list(range(5, 24))  # 5 AM to 11 PM
+    weights = [3, 8, 10, 9, 8, 7, 8, 8, 7, 6, 5, 5, 4, 3, 3, 2, 2, 1, 1]
+    total = sum(weights)
+    return [w / total for w in weights]
+
+
 def generate_training_data():
-    """Generate synthetic training data encoding real BTS patterns."""
+    """Generate synthetic training data encoding real BTS patterns.
+    Returns (X, y_delay, y_cancel) as numpy arrays."""
     print("Generating 50,000 synthetic flight records...")
 
-    data = {
-        "airline_idx": [],
-        "airline_on_time_rate": [],
-        "airline_cancel_rate": [],
-        "origin_congestion": [],
-        "origin_delay_rate": [],
-        "dest_congestion": [],
-        "dest_delay_rate": [],
-        "month": [],
-        "day_of_week": [],
-        "departure_hour": [],
-        "is_holiday": [],
-        "distance": [],
-        "month_factor": [],
-        "day_factor": [],
-        "hour_factor": [],
-        "delay_probability": [],
-        "cancel_probability": [],
-    }
+    X = np.zeros((N_SAMPLES, len(FEATURE_COLS)))
+    y_delay = np.zeros(N_SAMPLES)
+    y_cancel = np.zeros(N_SAMPLES)
+
+    hour_probs = _hour_distribution()
 
     for i in range(N_SAMPLES):
         # Random flight parameters
@@ -69,10 +73,7 @@ def generate_training_data():
         dest = np.random.choice([a for a in airports if a != origin])
         month = np.random.randint(1, 13)
         day = np.random.randint(0, 7)
-        hour = np.random.choice(
-            list(range(5, 24)),
-            p=_hour_distribution()
-        )
+        hour = np.random.choice(list(range(5, 24)), p=hour_probs)
         holiday_day = np.random.randint(1, 29)
         is_hol = 1 if is_holiday_period(month, holiday_day) else 0
 
@@ -86,24 +87,13 @@ def generate_training_data():
         h_factor = get_hour_delay_factor(hour)
 
         # === DELAY PROBABILITY MODEL ===
-        # Base delay rate from airline performance
-        base_delay = 1.0 - al["on_time_rate"]  # e.g., 0.18 for Delta
-
-        # Airport contribution (origin matters more - that's where you're sitting)
+        base_delay = 1.0 - al["on_time_rate"]
         airport_effect = (orig["delay_rate"] * 0.65 + dst["delay_rate"] * 0.35)
-
-        # Temporal factors compound multiplicatively
         temporal = m_factor * d_factor * h_factor
-
-        # Holiday surge
         holiday_boost = 1.25 if is_hol else 1.0
-
-        # Distance effect (longer flights slightly less delay-prone per BTS data,
-        # but more impacted when delays happen)
         dist_norm = dist / 3000.0
-        dist_effect = 1.0 - 0.05 * dist_norm  # slight reduction for long flights
+        dist_effect = 1.0 - 0.05 * dist_norm
 
-        # Combine: weighted blend of airline reliability and airport/temporal factors
         delay_prob = (
             0.30 * base_delay +
             0.35 * airport_effect * temporal +
@@ -111,20 +101,14 @@ def generate_training_data():
             0.15 * (airport_effect * holiday_boost * dist_effect)
         )
 
-        # Non-linear interaction: compounding bad factors makes things worse
-        # (Spirit + ORD + Friday evening in December should be very high)
         compound = base_delay * orig["congestion"] * m_factor * h_factor
         delay_prob += 0.15 * compound
 
-        # Add realistic noise (weather randomness, mechanical issues, etc.)
         noise = np.random.normal(0, 0.06)
         delay_prob = np.clip(delay_prob + noise, 0.02, 0.95)
 
         # === CANCELLATION PROBABILITY MODEL ===
-        # Cancellations are rarer and driven by different factors
         base_cancel = al["cancel_rate"]
-
-        # Severe weather months have higher cancellation
         cancel_weather = {1: 2.0, 2: 2.5, 3: 1.3, 4: 1.0, 5: 0.8, 6: 1.4,
                          7: 1.5, 8: 1.3, 9: 1.0, 10: 0.8, 11: 1.2, 12: 2.2}
 
@@ -135,7 +119,6 @@ def generate_training_data():
             (1.5 if is_hol else 1.0)
         )
 
-        # Hub airports have more cancellations during weather events
         if orig["congestion"] > 0.85 and month in [1, 2, 7, 12]:
             cancel_prob *= 1.8
 
@@ -143,54 +126,35 @@ def generate_training_data():
         cancel_prob = np.clip(cancel_prob + cancel_noise, 0.001, 0.25)
 
         # Store features
-        data["airline_idx"].append(airlines.index(airline))
-        data["airline_on_time_rate"].append(al["on_time_rate"])
-        data["airline_cancel_rate"].append(al["cancel_rate"])
-        data["origin_congestion"].append(orig["congestion"])
-        data["origin_delay_rate"].append(orig["delay_rate"])
-        data["dest_congestion"].append(dst["congestion"])
-        data["dest_delay_rate"].append(dst["delay_rate"])
-        data["month"].append(month)
-        data["day_of_week"].append(day)
-        data["departure_hour"].append(hour)
-        data["is_holiday"].append(is_hol)
-        data["distance"].append(dist / 1000.0)  # normalize to thousands of miles
-        data["month_factor"].append(m_factor)
-        data["day_factor"].append(d_factor)
-        data["hour_factor"].append(h_factor)
-        data["delay_probability"].append(delay_prob)
-        data["cancel_probability"].append(cancel_prob)
+        X[i] = [
+            airlines.index(airline),
+            al["on_time_rate"],
+            al["cancel_rate"],
+            orig["congestion"],
+            orig["delay_rate"],
+            dst["congestion"],
+            dst["delay_rate"],
+            month,
+            day,
+            hour,
+            is_hol,
+            dist / 1000.0,
+            m_factor,
+            d_factor,
+            h_factor,
+        ]
+        y_delay[i] = delay_prob
+        y_cancel[i] = cancel_prob
 
-    return pd.DataFrame(data)
-
-
-def _hour_distribution():
-    """Realistic departure hour distribution (more flights midday)."""
-    hours = list(range(5, 24))  # 5 AM to 11 PM
-    weights = [3, 8, 10, 9, 8, 7, 8, 8, 7, 6, 5, 5, 4, 3, 3, 2, 2, 1, 1]
-    total = sum(weights)
-    return [w / total for w in weights]
-
-
-FEATURE_COLS = [
-    "airline_idx", "airline_on_time_rate", "airline_cancel_rate",
-    "origin_congestion", "origin_delay_rate",
-    "dest_congestion", "dest_delay_rate",
-    "month", "day_of_week", "departure_hour",
-    "is_holiday", "distance",
-    "month_factor", "day_factor", "hour_factor"
-]
+    return X, y_delay, y_cancel
 
 
 def train_models():
     """Train and save both prediction models."""
-    df = generate_training_data()
-
-    X = df[FEATURE_COLS]
+    X, y_delay, y_cancel = generate_training_data()
 
     # ── Delay Model ──
     print("\nTraining delay prediction model...")
-    y_delay = df["delay_probability"]
     X_train, X_test, y_train, y_test = train_test_split(X, y_delay, test_size=0.2, random_state=42)
 
     delay_model = XGBRegressor(
@@ -212,7 +176,6 @@ def train_models():
 
     # ── Cancellation Model ──
     print("\nTraining cancellation prediction model...")
-    y_cancel = df["cancel_probability"]
     X_train_c, X_test_c, y_train_c, y_test_c = train_test_split(X, y_cancel, test_size=0.2, random_state=42)
 
     cancel_model = XGBRegressor(

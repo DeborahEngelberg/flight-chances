@@ -8,6 +8,6 @@ services:
       - key: PORT
         value: 5001
       - key: PYTHON_VERSION
-        value: "3.11"
+        value: "3.11.11"
       - key: NODE_VERSION
         value: "18"
