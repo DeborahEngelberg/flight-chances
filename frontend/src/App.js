@@ -107,10 +107,10 @@ function App() {
       <header className="header">
         <div className="header-content">
           <div className="logo">
-            <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-              <path d="M18 2L33 10V26L18 34L3 26V10L18 2Z" fill="#0ea5e9" opacity="0.15"/>
-              <path d="M8 20L16 12L28 8L24 20L16 24L8 20Z" fill="#0ea5e9"/>
-              <path d="M16 24L14 30L12 24" stroke="#0ea5e9" strokeWidth="1.5"/>
+            <svg width="36" height="36" viewBox="0 0 36 36" fill="none" style={{ filter: 'drop-shadow(0 0 8px rgba(56,189,248,0.4))' }}>
+              <path d="M18 2L33 10V26L18 34L3 26V10L18 2Z" fill="#38bdf8" opacity="0.12"/>
+              <path d="M8 20L16 12L28 8L24 20L16 24L8 20Z" fill="#38bdf8"/>
+              <path d="M16 24L14 30L12 24" stroke="#38bdf8" strokeWidth="1.5"/>
             </svg>
             <h1>Debbie's Lucky Flight Predictor</h1>
           </div>

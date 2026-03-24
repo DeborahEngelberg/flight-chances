@@ -118,7 +118,7 @@ function ResultsDisplay({ results }) {
       <div className="detail-cards">
         <div className="detail-card">
           <h3>
-            <span className="card-icon" style={{ background: '#dbeafe', color: '#2563eb' }}>
+            <span className="card-icon" style={{ background: 'rgba(56,189,248,0.12)', color: '#38bdf8' }}>
               &#9881;
             </span>
             Key Factors
@@ -128,7 +128,7 @@ function ResultsDisplay({ results }) {
 
         <div className="detail-card">
           <h3>
-            <span className="card-icon" style={{ background: '#dcfce7', color: '#16a34a' }}>
+            <span className="card-icon" style={{ background: 'rgba(52,211,153,0.12)', color: '#34d399' }}>
               &#10003;
             </span>
             Recommendations
@@ -145,7 +145,7 @@ function ResultsDisplay({ results }) {
       {/* ── Route Statistics ── */}
       <div className="detail-card" style={{ marginBottom: 20 }}>
         <h3>
-          <span className="card-icon" style={{ background: '#fef3c7', color: '#d97706' }}>
+          <span className="card-icon" style={{ background: 'rgba(251,191,36,0.12)', color: '#fbbf24' }}>
             &#9733;
           </span>
           Route Statistics
@@ -175,12 +175,12 @@ function ResultsDisplay({ results }) {
 
 
 function WeatherCard({ title, data, metar, faa }) {
-  const severityColor = data.severity > 0.5 ? '#ef4444' :
-                        data.severity > 0.25 ? '#f59e0b' : '#22c55e';
+  const severityColor = data.severity > 0.5 ? '#f87171' :
+                        data.severity > 0.25 ? '#fbbf24' : '#34d399';
 
   const catColors = {
-    'VFR': '#22c55e', 'MVFR': '#3b82f6',
-    'IFR': '#ef4444', 'LIFR': '#dc2626'
+    'VFR': '#34d399', 'MVFR': '#38bdf8',
+    'IFR': '#f87171', 'LIFR': '#ef4444'
   };
 
   return (
