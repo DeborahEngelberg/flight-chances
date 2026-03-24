@@ -224,7 +224,7 @@ function ValidationDashboard() {
               {stats.avg_error !== null ? `${stats.avg_error}%` : '--'}
             </div>
             <div className="vstat-label">Avg Error</div>
-            <div className="vstat-tooltip">The average difference between what we predicted and what actually happened. For example, if we predicted 40% delay but it was on time (0%), the error is 40%. Lower is better.</div>
+            <div className="vstat-tooltip">The gap between our average prediction and the actual disruption rate. For example, if we predict 25% delay on average but only 20% of flights are actually disrupted, the gap is 5%. Lower is better.</div>
           </div>
           <div className="vstat-card">
             <div className="vstat-value">

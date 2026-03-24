@@ -185,38 +185,11 @@ def check_flight_outcome(airline_code, flight_code, flight_date):
 
 
 def _check_outcome_web(airline_code, origin, destination, flight_date):
-    """Fallback: try to find flight outcome via web search."""
-    try:
-        from realtime_intel import search_web
-        query = f"{airline_code} {origin} {destination} {flight_date} flight status delay"
-        results = search_web(query, max_results=5)
-
-        for r in results:
-            text = f"{r['title']} {r['snippet']}".lower()
-            if "cancelled" in text or "canceled" in text:
-                return {
-                    "actual_delayed": 0,
-                    "actual_cancelled": 1,
-                    "actual_delay_minutes": 0,
-                    "actual_status": "cancelled",
-                    "outcome_source": "web",
-                }
-            # Look for delay mentions with numbers
-            delay_match = re.search(r'delayed?\s+(?:by\s+)?(\d+)\s*(?:min|hour)', text)
-            if delay_match:
-                mins = int(delay_match.group(1))
-                if "hour" in delay_match.group(0):
-                    mins *= 60
-                return {
-                    "actual_delayed": 1 if mins > 15 else 0,
-                    "actual_cancelled": 0,
-                    "actual_delay_minutes": mins,
-                    "actual_status": "delayed" if mins > 15 else "on_time",
-                    "outcome_source": "web",
-                }
-    except Exception as e:
-        print(f"[validator] Web outcome check failed: {e}")
-
+    """
+    Web scraping is too unreliable for outcome validation — generic news
+    articles about cancellations get misattributed to specific flights.
+    Only use AviationStack API for validated outcomes.
+    """
     return None
 
 
@@ -489,46 +462,54 @@ def get_validation_stats():
         "recent_validations": [],
     }
 
+    # Only count API-verified outcomes (not web-scraped ones which are unreliable)
+    verified = conn.execute(
+        "SELECT COUNT(*) as c FROM predictions WHERE actual_status IS NOT NULL AND outcome_source = 'aviationstack'"
+    ).fetchone()["c"]
+
+    # Use all validated if no API-verified ones exist yet
+    valid_filter = "actual_status IS NOT NULL AND outcome_source = 'aviationstack'" if verified > 0 else "actual_status IS NOT NULL"
+
     if validated > 0:
         # How often we were directionally correct
-        # (predicted high delay AND it was delayed, OR predicted low AND it was on time)
-        correct = conn.execute("""
+        # Cancelled flights count as disrupted (same as delayed for accuracy purposes)
+        correct = conn.execute(f"""
             SELECT COUNT(*) as c FROM predictions
-            WHERE actual_status IS NOT NULL
+            WHERE {valid_filter}
             AND (
-                (predicted_delay_pct >= 30 AND actual_delayed = 1)
-                OR (predicted_delay_pct < 30 AND actual_delayed = 0)
+                (predicted_delay_pct >= 30 AND (actual_delayed = 1 OR actual_cancelled = 1))
+                OR (predicted_delay_pct < 30 AND actual_delayed = 0 AND actual_cancelled = 0)
             )
         """).fetchone()["c"]
-        stats["accuracy"] = round((correct / validated) * 100, 1)
+        count_for_accuracy = conn.execute(f"SELECT COUNT(*) as c FROM predictions WHERE {valid_filter}").fetchone()["c"]
+        if count_for_accuracy > 0:
+            stats["accuracy"] = round((correct / count_for_accuracy) * 100, 1)
 
-        # Average prediction error
-        avg_err = conn.execute("""
-            SELECT AVG(ABS(prediction_error)) as e FROM predictions
-            WHERE prediction_error IS NOT NULL
-        """).fetchone()["e"]
-        stats["avg_error"] = round((avg_err or 0) * 100, 1)
+        # Calibration gap: how far off are we on average vs the actual disruption rate?
+        # This is more meaningful than comparing probability vs binary.
+        # E.g., we predict 25% avg, actual rate is 20% → gap is 5 percentage points
+        avg_predicted = conn.execute(f"""
+            SELECT AVG(predicted_delay_pct) as a FROM predictions WHERE {valid_filter}
+        """).fetchone()["a"] or 0
 
-        # Breakdown
-        delayed_correct = conn.execute("""
+        actual_disrupted = conn.execute(f"""
             SELECT COUNT(*) as c FROM predictions
-            WHERE actual_delayed = 1 AND predicted_delay_pct >= 30
+            WHERE {valid_filter} AND (actual_delayed = 1 OR actual_cancelled = 1)
         """).fetchone()["c"]
-        total_delayed = conn.execute("""
-            SELECT COUNT(*) as c FROM predictions WHERE actual_delayed = 1
-        """).fetchone()["c"]
-        if total_delayed > 0:
-            stats["delay_accuracy"] = round((delayed_correct / total_delayed) * 100, 1)
+        actual_rate = (actual_disrupted / count_for_accuracy * 100) if count_for_accuracy > 0 else 0
 
-        cancelled_correct = conn.execute("""
+        stats["avg_error"] = round(abs(avg_predicted - actual_rate), 1)
+
+        # Breakdown: delay detection rate
+        delayed_correct = conn.execute(f"""
             SELECT COUNT(*) as c FROM predictions
-            WHERE actual_cancelled = 1 AND predicted_cancel_pct >= 5
+            WHERE {valid_filter} AND (actual_delayed = 1 OR actual_cancelled = 1) AND predicted_delay_pct >= 30
         """).fetchone()["c"]
-        total_cancelled = conn.execute("""
-            SELECT COUNT(*) as c FROM predictions WHERE actual_cancelled = 1
+        total_disrupted = conn.execute(f"""
+            SELECT COUNT(*) as c FROM predictions WHERE {valid_filter} AND (actual_delayed = 1 OR actual_cancelled = 1)
         """).fetchone()["c"]
-        if total_cancelled > 0:
-            stats["cancel_accuracy"] = round((cancelled_correct / total_cancelled) * 100, 1)
+        if total_disrupted > 0:
+            stats["delay_accuracy"] = round((delayed_correct / total_disrupted) * 100, 1)
 
     # Calibration factors
     calib_rows = conn.execute("""
