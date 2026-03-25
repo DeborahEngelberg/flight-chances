@@ -740,6 +740,105 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
+   FLIGHT PICKER (multiple flights for same code)
+   ═══════════════════════════════════════════════════════════════════ */
+.flight-picker {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: slideUp 0.3s ease-out;
+}
+
+.flight-picker-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px 16px;
+  background: var(--bg-elevated);
+  border: 1.5px solid var(--border-medium);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all var(--transition);
+  font-family: inherit;
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .flight-picker-option {
+  background: var(--bg-glass);
+}
+
+.flight-picker-option:hover {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.flight-picker-option.selected {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+}
+
+.fpo-route {
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  margin-bottom: 4px;
+}
+
+.fpo-details {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.fpo-date {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.fpo-time {
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+}
+
+.fpo-delay {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: var(--amber-dim);
+  color: var(--amber);
+}
+
+.fpo-status {
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+}
+
+[data-theme="dark"] .fpo-status { background: var(--bg-glass); }
+
+.fpo-status-landed { background: var(--green-dim); color: var(--green); border-color: var(--green-border); }
+.fpo-status-active { background: var(--accent-glow); color: var(--accent); border-color: rgba(14,165,233,0.15); }
+.fpo-status-cancelled { background: var(--red-dim); color: var(--red); border-color: var(--red-border); }
+.fpo-status-scheduled { background: var(--bg-elevated); color: var(--text-secondary); }
+
+.fpo-airports {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
    LIVE FLIGHT STATUS BANNER
    ═══════════════════════════════════════════════════════════════════ */
 .live-status-banner {

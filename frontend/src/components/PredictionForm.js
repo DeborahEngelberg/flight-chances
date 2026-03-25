@@ -18,37 +18,59 @@ function PredictionForm({ airlines, airports, onSubmit, loading }) {
   const [date, setDate] = useState(defaultDate);
   const [departureTime, setDepartureTime] = useState('12:00');
 
+  const [allFlights, setAllFlights] = useState([]);
+
+  const selectFlight = (flight) => {
+    if (flight.airline_code) setAirline(flight.airline_code);
+    if (flight.origin) setOrigin(flight.origin);
+    if (flight.destination) setDestination(flight.destination);
+    if (flight.departure_time) setDepartureTime(flight.departure_time);
+    if (flight.date) setDate(flight.date);
+    setAllFlights([]);
+    setLookupError(null);
+    setLookupResult({ ...flight, success: true });
+  };
+
   const handleLookup = async () => {
     if (!flightCode.trim()) return;
     setLookupLoading(true);
     setLookupError(null);
     setLookupResult(null);
+    setAllFlights([]);
     try {
       const res = await axios.get(`${API_BASE}/lookup?code=${encodeURIComponent(flightCode.trim())}`);
       const data = res.data;
       setLookupResult(data);
 
-      // Auto-fill fields
+      // If multiple flights returned, show picker
+      if (data.all_flights && data.all_flights.length > 1) {
+        setAllFlights(data.all_flights);
+        setLookupError(`Found ${data.all_flights.length} flights for this code — pick yours below`);
+      }
+
+      // Auto-fill with best match
       if (data.airline_code) setAirline(data.airline_code);
       if (data.origin) setOrigin(data.origin);
       if (data.destination) setDestination(data.destination);
       if (data.departure_time) setDepartureTime(data.departure_time);
       if (data.date) setDate(data.date);
 
-      // Build feedback message
-      const filled = [];
-      const missing = [];
-      if (data.airline_code) filled.push('airline');
-      else missing.push('airline');
-      if (data.origin && data.destination) filled.push('route');
-      else if (data.origin) { filled.push('origin'); missing.push('destination'); }
-      else missing.push('origin', 'destination');
-      if (data.departure_time) filled.push('time');
-      else missing.push('departure time');
-      if (data.date) filled.push('date');
+      // Build feedback if no picker needed
+      if (!data.all_flights || data.all_flights.length <= 1) {
+        const filled = [];
+        const missing = [];
+        if (data.airline_code) filled.push('airline');
+        else missing.push('airline');
+        if (data.origin && data.destination) filled.push('route');
+        else if (data.origin) { filled.push('origin'); missing.push('destination'); }
+        else missing.push('origin', 'destination');
+        if (data.departure_time) filled.push('time');
+        else missing.push('departure time');
+        if (data.date) filled.push('date');
 
-      if (missing.length > 0) {
-        setLookupError(`Auto-filled ${filled.join(', ')}. Please set ${missing.join(', ')} manually.`);
+        if (missing.length > 0) {
+          setLookupError(`Auto-filled ${filled.join(', ')}. Please set ${missing.join(', ')} manually.`);
+        }
       }
     } catch (err) {
       setLookupError('Lookup failed. You can still fill in the fields manually.');
@@ -113,7 +135,7 @@ function PredictionForm({ airlines, airports, onSubmit, loading }) {
             )}
           </button>
         </div>
-        {lookupResult && lookupResult.success && !lookupError && (
+        {lookupResult && lookupResult.success && allFlights.length === 0 && !lookupError && (
           <div className="lookup-success">
             Found: {lookupResult.airline_name || lookupResult.airline_code || ''}
             {lookupResult.origin && lookupResult.destination
@@ -125,6 +147,36 @@ function PredictionForm({ airlines, airports, onSubmit, loading }) {
         )}
         {lookupError && (
           <div className="lookup-partial">{lookupError}</div>
+        )}
+        {allFlights.length > 1 && (
+          <div className="flight-picker">
+            {allFlights.map((f, i) => {
+              const isSelected = f.origin === origin && f.destination === destination && f.date === date;
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  className={`flight-picker-option ${isSelected ? 'selected' : ''}`}
+                  onClick={() => selectFlight(f)}
+                >
+                  <div className="fpo-route">
+                    {f.origin || '???'} &rarr; {f.destination || '???'}
+                  </div>
+                  <div className="fpo-details">
+                    <span className="fpo-date">{f.date || f.flight_date || ''}</span>
+                    <span className="fpo-time">{f.departure_time || ''}</span>
+                    {f.delay_minutes > 0 && (
+                      <span className="fpo-delay">Delayed {f.delay_minutes}min</span>
+                    )}
+                    <span className={`fpo-status fpo-status-${f.status}`}>{f.status}</span>
+                  </div>
+                  {f.origin_name && (
+                    <div className="fpo-airports">{f.origin_name} → {f.destination_name}</div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         )}
       </div>
 

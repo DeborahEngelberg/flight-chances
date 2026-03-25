@@ -24,6 +24,7 @@ KNOWN_AIRPORTS = set(AIRPORT_DATA.keys())
 def lookup_flight(flight_code):
     """
     Look up a flight by its code (e.g., "OS201", "AA100", "AC845").
+    Returns all matching flights so user can pick the right one.
     """
     flight_code = flight_code.strip().upper().replace("-", "").replace(" ", "")
 
@@ -40,16 +41,21 @@ def lookup_flight(flight_code):
         "flight_number": flight_code,
         "source": "parsed",
         "raw_info": "",
+        "all_flights": [],  # All matching flights for user to pick from
     }
 
     if airline_code:
         result["success"] = True
 
-    # ── Strategy 0: AviationStack API (best — exact data) ──
+    # ── Strategy 0: AviationStack API — fetch ALL matching flights ──
     if AVIATIONSTACK_KEY:
-        av_info = _query_aviationstack(flight_code, airline_code)
-        if av_info:
-            _merge(result, av_info)
+        all_flights = _query_aviationstack_all(flight_code, airline_code)
+        if all_flights:
+            result["all_flights"] = all_flights
+            # Auto-select: prefer tomorrow, then today, then nearest future date
+            best = _pick_best_flight(all_flights)
+            if best:
+                _merge(result, best)
 
     # ── Strategy 1: Web search for route + schedule ──
     if not result["origin"] or not result["destination"] or not result["departure_time"]:
@@ -84,6 +90,28 @@ def lookup_flight(flight_code):
     return result
 
 
+def _pick_best_flight(flights):
+    """Pick the best matching flight — prefer tomorrow, then today, then nearest future."""
+    now = datetime.now()
+    today = now.strftime("%Y-%m-%d")
+    tomorrow = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    # Priority: tomorrow > today (if not yet departed) > nearest future
+    for target_date in [tomorrow, today]:
+        for f in flights:
+            if f.get("date") == target_date:
+                return f
+
+    # Nearest future date
+    future = [f for f in flights if f.get("date", "") >= today]
+    if future:
+        future.sort(key=lambda f: f.get("date", ""))
+        return future[0]
+
+    # Fall back to first
+    return flights[0] if flights else None
+
+
 def _merge(result, info):
     """Merge non-None values from info into result."""
     for key in ["origin", "destination", "departure_time", "date", "airline_code"]:
@@ -114,76 +142,126 @@ def _parse_flight_code(code):
     return None, code
 
 
-def _query_aviationstack(flight_code, airline_code=None):
+def _query_aviationstack_all(flight_code, airline_code=None):
     """
-    Query AviationStack API for exact flight schedule data.
-    Free tier: 100 requests/month. Returns precise departure/arrival/times.
-    API docs: https://aviationstack.com/documentation
+    Query AviationStack API for ALL instances of this flight.
+    Tries multiple code formats (with/without leading zeros).
+    Returns a list of flight dicts, one per date/route.
     """
     if not AVIATIONSTACK_KEY:
-        return None
+        return []
 
-    try:
-        # AviationStack wants the IATA flight number (e.g., "OS201")
-        url = (
-            f"http://api.aviationstack.com/v1/flights"
-            f"?access_key={AVIATIONSTACK_KEY}"
-            f"&flight_iata={flight_code}"
-            f"&limit=1"
-        )
+    # Build variants: "OS036" -> try ["OS036", "OS36"], "OS36" -> try ["OS36", "OS0036"]
+    codes_to_try = [flight_code]
+    airline_part = ""
+    num_part = ""
+    for i, c in enumerate(flight_code):
+        if c.isdigit():
+            airline_part = flight_code[:i]
+            num_part = flight_code[i:]
+            break
+    if num_part.startswith("0") and len(num_part) > 1:
+        codes_to_try.append(airline_part + num_part.lstrip("0"))
+    elif num_part and not num_part.startswith("0") and len(num_part) < 4:
+        codes_to_try.append(airline_part + num_part.zfill(4))
 
-        resp = requests.get(url, timeout=10)
-        if resp.status_code != 200:
-            print(f"AviationStack error: HTTP {resp.status_code}")
-            return None
+    seen_keys = set()
+    results = []
 
-        data = resp.json()
-        if not data.get("data") or len(data["data"]) == 0:
-            print(f"AviationStack: no results for {flight_code}")
-            return None
+    for code_variant in codes_to_try:
+        try:
+            url = (
+                f"http://api.aviationstack.com/v1/flights"
+                f"?access_key={AVIATIONSTACK_KEY}"
+                f"&flight_iata={code_variant}"
+                f"&limit=10"
+            )
+            resp = requests.get(url, timeout=10)
+            if resp.status_code != 200:
+                continue
 
-        flight = data["data"][0]
-        result = {"source": "aviationstack"}
+            data = resp.json()
+            if not data.get("data"):
+                continue
 
-        # Departure info
-        dep = flight.get("departure", {})
-        arr = flight.get("arrival", {})
+            for flight in data["data"]:
+                entry = {"source": "aviationstack"}
+                dep = flight.get("departure", {})
+                arr = flight.get("arrival", {})
 
-        dep_iata = dep.get("iata")
-        arr_iata = arr.get("iata")
+                dep_iata = dep.get("iata")
+                arr_iata = arr.get("iata")
+                if dep_iata:
+                    entry["origin"] = dep_iata
+                if arr_iata:
+                    entry["destination"] = arr_iata
 
-        if dep_iata and dep_iata in AIRPORT_DATA:
-            result["origin"] = dep_iata
-        elif dep_iata:
-            result["origin"] = dep_iata  # still use it even if not in our DB
+                scheduled = dep.get("scheduled")
+                if scheduled:
+                    try:
+                        dt = datetime.fromisoformat(scheduled.replace("Z", "+00:00"))
+                        entry["departure_time"] = dt.strftime("%H:%M")
+                        entry["date"] = dt.strftime("%Y-%m-%d")
+                    except (ValueError, AttributeError):
+                        pass
 
-        if arr_iata and arr_iata in AIRPORT_DATA:
-            result["destination"] = arr_iata
-        elif arr_iata:
-            result["destination"] = arr_iata
+                entry["flight_date"] = flight.get("flight_date", "")
+                entry["status"] = flight.get("flight_status", "unknown")
 
-        # Departure time (scheduled)
-        scheduled = dep.get("scheduled")  # "2026-03-23T10:30:00+00:00"
-        if scheduled:
-            try:
-                dt = datetime.fromisoformat(scheduled.replace("Z", "+00:00"))
-                result["departure_time"] = dt.strftime("%H:%M")
-                result["date"] = dt.strftime("%Y-%m-%d")
-            except (ValueError, AttributeError):
-                pass
+                estimated = dep.get("estimated")
+                if estimated:
+                    try:
+                        est_dt = datetime.fromisoformat(estimated.replace("Z", "+00:00"))
+                        entry["estimated_time"] = est_dt.strftime("%H:%M")
+                    except (ValueError, AttributeError):
+                        pass
+                entry["delay_minutes"] = dep.get("delay") or 0
+                entry["gate"] = dep.get("gate", "")
+                entry["terminal"] = dep.get("terminal", "")
 
-        # Airline info
-        airline_info = flight.get("airline", {})
-        al_iata = airline_info.get("iata")
-        if al_iata and al_iata in AIRLINE_DATA:
-            result["airline_code"] = al_iata
+                arr_airport_name = arr.get("airport", "")
+                dep_airport_name = dep.get("airport", "")
+                entry["origin_name"] = dep_airport_name
+                entry["destination_name"] = arr_airport_name
 
-        print(f"AviationStack: {flight_code} → {result.get('origin')}→{result.get('destination')} at {result.get('departure_time')}")
-        return result
+                airline_info = flight.get("airline", {})
+                al_iata = airline_info.get("iata")
+                if al_iata and al_iata in AIRLINE_DATA:
+                    entry["airline_code"] = al_iata
 
-    except Exception as e:
-        print(f"AviationStack error: {e}")
-        return None
+                # Build display label
+                dep_code = entry.get("origin", "???")
+                arr_code = entry.get("destination", "???")
+                date_str = entry.get("date", entry.get("flight_date", ""))
+                time_str = entry.get("departure_time", "")
+                status = entry.get("status", "")
+                delay = entry.get("delay_minutes", 0)
+
+                label = f"{dep_code} \u2192 {arr_code}"
+                if date_str:
+                    label += f" | {date_str}"
+                if time_str:
+                    label += f" at {time_str}"
+                if delay and delay > 0:
+                    label += f" (delayed {delay}min)"
+                elif status:
+                    label += f" ({status})"
+                entry["label"] = label
+
+                # Dedup by route+date
+                key = f"{dep_iata}_{arr_iata}_{entry.get('date', entry.get('flight_date', ''))}"
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    results.append(entry)
+
+        except Exception as e:
+            print(f"AviationStack error for {code_variant}: {e}")
+            continue
+
+    # Sort: future dates first, then by date
+    results.sort(key=lambda f: f.get("date", f.get("flight_date", "")), reverse=True)
+    print(f"AviationStack: {flight_code} \u2192 {len(results)} flights found (tried {codes_to_try})")
+    return results
 
 
 def _scrape_flightaware(flight_code):
