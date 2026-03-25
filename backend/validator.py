@@ -101,15 +101,41 @@ def init_db():
 def log_prediction(airline_code, origin, destination, flight_date,
                    departure_time, delay_pct, cancel_pct, risk_level,
                    flight_code=None):
-    """Log a prediction to the database. Called from /api/predict."""
+    """Log a prediction to the database. Only logs once per unique flight."""
     conn = get_db()
-    conn.execute("""
-        INSERT INTO predictions
-            (airline_code, origin, destination, flight_date, departure_time,
-             predicted_delay_pct, predicted_cancel_pct, predicted_risk_level, flight_code)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (airline_code, origin, destination, flight_date, departure_time,
-          delay_pct, cancel_pct, risk_level, flight_code))
+
+    # Check if we already have a prediction for this exact flight
+    existing = conn.execute("""
+        SELECT id, flight_code FROM predictions
+        WHERE airline_code = ? AND origin = ? AND destination = ?
+          AND flight_date = ? AND departure_time = ?
+        ORDER BY created_at DESC LIMIT 1
+    """, (airline_code, origin, destination, flight_date, departure_time)).fetchone()
+
+    if existing:
+        # Update the existing prediction with latest values and flight code if we now have one
+        updates = {
+            "predicted_delay_pct": delay_pct,
+            "predicted_cancel_pct": cancel_pct,
+            "predicted_risk_level": risk_level,
+        }
+        if flight_code and not existing["flight_code"]:
+            updates["flight_code"] = flight_code
+
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        conn.execute(
+            f"UPDATE predictions SET {set_clause} WHERE id = ?",
+            list(updates.values()) + [existing["id"]]
+        )
+    else:
+        conn.execute("""
+            INSERT INTO predictions
+                (airline_code, origin, destination, flight_date, departure_time,
+                 predicted_delay_pct, predicted_cancel_pct, predicted_risk_level, flight_code)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (airline_code, origin, destination, flight_date, departure_time,
+              delay_pct, cancel_pct, risk_level, flight_code))
+
     conn.commit()
     conn.close()
 
@@ -123,11 +149,11 @@ def check_live_flight_status(flight_code, flight_date):
         return None
 
     try:
+        # Query without date filter — AviationStack returns the most recent/active flight
         url = (
             f"http://api.aviationstack.com/v1/flights?"
             f"access_key={AVIATIONSTACK_KEY}"
             f"&flight_iata={flight_code}"
-            f"&flight_date={flight_date}"
         )
         resp = requests.get(url, timeout=10)
         if resp.status_code != 200:
@@ -138,7 +164,13 @@ def check_live_flight_status(flight_code, flight_date):
         if not flights:
             return None
 
+        # Pick the flight matching our date, or the first one
         flight = flights[0]
+        if flight_date:
+            for f in flights:
+                if f.get("flight_date", "") == flight_date:
+                    flight = f
+                    break
         departure = flight.get("departure", {})
         status = flight.get("flight_status", "unknown")
 

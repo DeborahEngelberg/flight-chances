@@ -79,6 +79,7 @@ function PredictionForm({ airlines, airports, onSubmit, loading }) {
       destination,
       date,
       departure_time: departureTime,
+      flight_code: flightCode.trim() || undefined,
     });
   };
 
