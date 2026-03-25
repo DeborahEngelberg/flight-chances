@@ -3,9 +3,10 @@ Flight Code Lookup — Resolves a flight number (e.g., "OS201", "AA100") into
 airline, origin, destination, departure time, and date.
 
 Strategy priority:
-1. AviationStack API (if API key is set) — exact schedule data
-2. FlightAware scrape — public flight pages
-3. Web search — DuckDuckGo for route info
+1. AeroDataBox API — future schedule data (works for tomorrow's flights)
+2. AviationStack API — live/recent flight data
+3. FlightAware scrape — public flight pages
+4. Web search — DuckDuckGo for route info
 """
 
 import re
@@ -14,8 +15,11 @@ import requests
 from datetime import datetime, timedelta
 from model.feature_data import AIRLINE_DATA, AIRPORT_DATA
 
-# Set this to your free AviationStack API key (100 requests/month free)
-# Get one at: https://aviationstack.com/signup/free
+# AeroDataBox — free tier: 600 calls/month, supports future schedules
+# Sign up at: https://api.market/store/aedbx/aerodatabox
+AERODATABOX_KEY = os.environ.get("AERODATABOX_KEY", "")
+
+# AviationStack — free tier: 100 calls/month, live/recent flights only
 AVIATIONSTACK_KEY = os.environ.get("AVIATIONSTACK_KEY", "a496b0f68e31686ab45b57e00afae8ff")
 
 KNOWN_AIRPORTS = set(AIRPORT_DATA.keys())
@@ -47,15 +51,31 @@ def lookup_flight(flight_code):
     if airline_code:
         result["success"] = True
 
-    # ── Strategy 0: AviationStack API — fetch ALL matching flights ──
-    if AVIATIONSTACK_KEY:
-        all_flights = _query_aviationstack_all(flight_code, airline_code)
-        if all_flights:
-            result["all_flights"] = all_flights
-            # Auto-select: prefer tomorrow, then today, then nearest future date
-            best = _pick_best_flight(all_flights)
+    # ── Strategy 0: AeroDataBox API — future schedules (best for tomorrow) ──
+    if AERODATABOX_KEY:
+        adb_flights = _query_aerodatabox(flight_code)
+        if adb_flights:
+            result["all_flights"] = adb_flights
+            best = _pick_best_flight(adb_flights)
             if best:
                 _merge(result, best)
+
+    # ── Strategy 1: AviationStack API — live/recent flights ──
+    if AVIATIONSTACK_KEY:
+        av_flights = _query_aviationstack_all(flight_code, airline_code)
+        if av_flights:
+            # Merge with any AeroDataBox results, avoiding duplicates
+            existing_keys = {f"{f.get('origin')}_{f.get('destination')}_{f.get('date','')}" for f in result.get("all_flights", [])}
+            for f in av_flights:
+                key = f"{f.get('origin')}_{f.get('destination')}_{f.get('date','')}"
+                if key not in existing_keys:
+                    result.setdefault("all_flights", []).append(f)
+                    existing_keys.add(key)
+            # If AeroDataBox had no results, auto-select from AviationStack
+            if not result.get("origin"):
+                best = _pick_best_flight(result.get("all_flights", []))
+                if best:
+                    _merge(result, best)
 
     # ── Strategy 1: Web search for route + schedule ──
     if not result["origin"] or not result["destination"] or not result["departure_time"]:
@@ -110,6 +130,162 @@ def _pick_best_flight(flights):
 
     # Fall back to first
     return flights[0] if flights else None
+
+
+def _query_aerodatabox(flight_code):
+    """
+    Query AeroDataBox API for flight schedule data.
+    Checks today, tomorrow, and the next day to find all instances.
+    Works for future flights — the key advantage over AviationStack free tier.
+    """
+    if not AERODATABOX_KEY:
+        return []
+
+    # Normalize flight code — AeroDataBox handles both OS036 and OS36
+    results = []
+    seen_keys = set()
+    now = datetime.now()
+
+    # Check today, tomorrow, and day after
+    dates_to_check = [
+        now.strftime("%Y-%m-%d"),
+        (now + timedelta(days=1)).strftime("%Y-%m-%d"),
+        (now + timedelta(days=2)).strftime("%Y-%m-%d"),
+    ]
+
+    # Try with and without leading zeros
+    codes_to_try = [flight_code]
+    airline_part = ""
+    num_part = ""
+    for i, c in enumerate(flight_code):
+        if c.isdigit():
+            airline_part = flight_code[:i]
+            num_part = flight_code[i:]
+            break
+    if num_part.startswith("0") and len(num_part) > 1:
+        codes_to_try.append(airline_part + num_part.lstrip("0"))
+    elif num_part and len(num_part) < 4:
+        codes_to_try.append(airline_part + num_part.zfill(4))
+
+    for code_variant in codes_to_try:
+        for date_str in dates_to_check:
+            try:
+                url = f"https://aerodatabox.p.rapidapi.com/flights/number/{code_variant}/{date_str}"
+                headers = {
+                    "X-RapidAPI-Key": AERODATABOX_KEY,
+                    "X-RapidAPI-Host": "aerodatabox.p.rapidapi.com",
+                }
+                resp = requests.get(url, headers=headers, timeout=10)
+
+                if resp.status_code != 200:
+                    continue
+
+                data = resp.json()
+                if not data:
+                    continue
+
+                # AeroDataBox returns a list of flight legs
+                flights_list = data if isinstance(data, list) else [data]
+
+                for flight in flights_list:
+                    dep = flight.get("departure", {})
+                    arr = flight.get("arrival", {})
+
+                    dep_iata = dep.get("airport", {}).get("iata", "")
+                    arr_iata = arr.get("airport", {}).get("iata", "")
+                    dep_name = dep.get("airport", {}).get("name", "")
+                    arr_name = arr.get("airport", {}).get("name", "")
+
+                    # Scheduled times
+                    sched_dep = dep.get("scheduledTimeLocal", "") or dep.get("scheduledTimeUtc", "")
+                    sched_arr = arr.get("scheduledTimeLocal", "") or arr.get("scheduledTimeUtc", "")
+
+                    dep_time = ""
+                    dep_date = date_str
+                    if sched_dep:
+                        try:
+                            # Format: "2026-03-26 19:10+01:00" or "2026-03-26T19:10:00"
+                            clean = sched_dep.replace("T", " ")
+                            dep_time = clean[11:16]  # HH:MM
+                            dep_date = clean[:10]     # YYYY-MM-DD
+                        except (IndexError, ValueError):
+                            pass
+
+                    # Check for delays
+                    revised_dep = dep.get("revisedTime", {})
+                    estimated_time = ""
+                    delay_minutes = 0
+                    if revised_dep and revised_dep.get("local"):
+                        try:
+                            est_clean = revised_dep["local"].replace("T", " ")
+                            estimated_time = est_clean[11:16]
+                            if dep_time and estimated_time:
+                                # Calculate delay
+                                sched_h, sched_m = int(dep_time[:2]), int(dep_time[3:5])
+                                est_h, est_m = int(estimated_time[:2]), int(estimated_time[3:5])
+                                delay_minutes = (est_h * 60 + est_m) - (sched_h * 60 + sched_m)
+                                if delay_minutes < 0:
+                                    delay_minutes += 24 * 60
+                        except (IndexError, ValueError):
+                            pass
+
+                    status = flight.get("status", "scheduled")
+                    gate = dep.get("gate", "")
+                    terminal = dep.get("terminal", "")
+
+                    # Airline info
+                    airline_info = flight.get("airline", {})
+                    al_iata = airline_info.get("iata", "")
+
+                    # Build entry
+                    entry = {
+                        "source": "aerodatabox",
+                        "origin": dep_iata,
+                        "destination": arr_iata,
+                        "origin_name": dep_name,
+                        "destination_name": arr_name,
+                        "departure_time": dep_time,
+                        "date": dep_date,
+                        "flight_date": dep_date,
+                        "status": status.lower() if status else "scheduled",
+                        "gate": gate,
+                        "terminal": terminal,
+                        "delay_minutes": max(0, delay_minutes),
+                        "estimated_time": estimated_time,
+                    }
+
+                    if al_iata and al_iata in AIRLINE_DATA:
+                        entry["airline_code"] = al_iata
+
+                    # Build label
+                    label = f"{dep_iata or '???'} \u2192 {arr_iata or '???'}"
+                    if dep_date:
+                        label += f" | {dep_date}"
+                    if dep_time:
+                        label += f" at {dep_time}"
+                    if delay_minutes > 0:
+                        label += f" (delayed {delay_minutes}min)"
+                    elif status:
+                        label += f" ({status.lower()})"
+                    entry["label"] = label
+
+                    # Dedup
+                    key = f"{dep_iata}_{arr_iata}_{dep_date}"
+                    if key not in seen_keys and dep_iata:
+                        seen_keys.add(key)
+                        results.append(entry)
+
+            except Exception as e:
+                print(f"AeroDataBox error for {code_variant} on {date_str}: {e}")
+                continue
+
+        # If we found results with this code variant, don't try others
+        if results:
+            break
+
+    results.sort(key=lambda f: f.get("date", ""))
+    print(f"AeroDataBox: {flight_code} \u2192 {len(results)} flights found")
+    return results
 
 
 def _merge(result, info):
