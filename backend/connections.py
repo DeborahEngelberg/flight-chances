@@ -18,7 +18,7 @@ from model.feature_data import (
     get_hour_delay_factor, compute_distance
 )
 
-AVIATIONSTACK_KEY = os.environ.get("AVIATIONSTACK_KEY", "a496b0f68e31686ab45b57e00afae8ff")
+AVIATIONSTACK_KEY = os.environ.get("AVIATIONSTACK_KEY", "")
 
 # Minimum connection times by airport type (minutes)
 # Hub airports need more time; smaller airports less

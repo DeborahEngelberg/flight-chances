@@ -20,7 +20,7 @@ from model.feature_data import AIRLINE_DATA, AIRPORT_DATA
 AERODATABOX_KEY = os.environ.get("AERODATABOX_KEY", "")
 
 # AviationStack — free tier: 100 calls/month, live/recent flights only
-AVIATIONSTACK_KEY = os.environ.get("AVIATIONSTACK_KEY", "a496b0f68e31686ab45b57e00afae8ff")
+AVIATIONSTACK_KEY = os.environ.get("AVIATIONSTACK_KEY", "")
 
 KNOWN_AIRPORTS = set(AIRPORT_DATA.keys())
 

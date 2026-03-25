@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 DB_PATH = os.path.join(os.path.dirname(__file__), "predictions.db")
 
 # AviationStack API (same key as flight_lookup)
-AVIATIONSTACK_KEY = os.environ.get("AVIATIONSTACK_KEY", "a496b0f68e31686ab45b57e00afae8ff")
+AVIATIONSTACK_KEY = os.environ.get("AVIATIONSTACK_KEY", "")
 
 
 # ═══════════════════════════════════════════════════════════════════

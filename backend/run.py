@@ -7,6 +7,10 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Load .env file before anything else imports env vars
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+
 MODEL_DIR = os.path.join(os.path.dirname(__file__), "model")
 
 
