@@ -196,9 +196,12 @@ def _query_aerodatabox(flight_code):
                     dep_name = dep.get("airport", {}).get("name", "")
                     arr_name = arr.get("airport", {}).get("name", "")
 
-                    # Scheduled times
-                    sched_dep = dep.get("scheduledTimeLocal", "") or dep.get("scheduledTimeUtc", "")
-                    sched_arr = arr.get("scheduledTimeLocal", "") or arr.get("scheduledTimeUtc", "")
+                    # Scheduled times — AeroDataBox nests under scheduledTime.local/utc
+                    sched_obj = dep.get("scheduledTime", {})
+                    if isinstance(sched_obj, dict):
+                        sched_dep = sched_obj.get("local", "") or sched_obj.get("utc", "")
+                    else:
+                        sched_dep = dep.get("scheduledTimeLocal", "") or dep.get("scheduledTimeUtc", "") or ""
 
                     dep_time = ""
                     dep_date = date_str
