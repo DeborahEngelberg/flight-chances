@@ -269,12 +269,12 @@ function RiskHero({ results }) {
   const getSummary = () => {
     const dp = delay_probability;
     const cp = cancellation_probability;
-    if (dp < 15 && cp < 2) return "This flight looks great. Low risk across the board — travel with confidence.";
-    if (dp < 25 && cp < 3) return "Solid odds. Minor delay possible but unlikely to disrupt your plans.";
-    if (dp < 35 && cp < 5) return "Moderate risk. Allow extra buffer time, especially for connections.";
-    if (dp < 50) return "Elevated delay risk. Consider an earlier flight or have a backup plan ready.";
-    if (dp < 65) return "High delay risk. Expect disruptions. Download your airline's app for live updates.";
-    return "Very high risk of significant delays or cancellation. Strongly consider rebooking.";
+    if (dp < 15 && cp < 2) return "Looking good. Low risk across the board.";
+    if (dp < 25 && cp < 3) return "Solid odds. A small delay is possible but nothing unusual for this route.";
+    if (dp < 35 && cp < 5) return "Some delay risk — pretty normal for this time and route. Give yourself a little extra buffer.";
+    if (dp < 50) return "Higher than average delay risk. Not unusual for the conditions, but worth keeping an eye on.";
+    if (dp < 65) return "This route is seeing elevated delays right now. Stay flexible and check for updates closer to departure.";
+    return "Delays are very likely given current conditions. Keep your options open.";
   };
 
   return (
