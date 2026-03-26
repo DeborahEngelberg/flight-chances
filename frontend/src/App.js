@@ -14,7 +14,7 @@ import AlertCenter from './components/AlertCenter';
 import LiveFlightStatus from './components/LiveFlightStatus';
 import './App.css';
 
-const AUTO_REFRESH_INTERVAL = 120000; // 2 minutes
+const AUTO_REFRESH_INTERVAL = 120000;
 
 function App() {
   const [airlines, setAirlines] = useState([]);
@@ -26,11 +26,10 @@ function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [nextRefresh, setNextRefresh] = useState(null);
-  const [activeView, setActiveView] = useState('predict'); // 'predict' | 'connections' | 'dashboard' | 'alerts' | 'accuracy'
-  const [darkMode, setDarkMode] = useState(() => {
-    const saved = localStorage.getItem('flightrisk_theme');
-    return saved === 'dark';
-  });
+  const [activeView, setActiveView] = useState('predict');
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('flightrisk_theme') === 'dark');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [resultTab, setResultTab] = useState('overview');
   const refreshTimer = useRef(null);
   const countdownTimer = useRef(null);
   const resultsRef = useRef(null);
@@ -56,7 +55,6 @@ function App() {
     fetchData();
   }, []);
 
-  // Auto-refresh logic
   const silentRefresh = useCallback(async (formData) => {
     if (!formData) return;
     try {
@@ -80,13 +78,8 @@ function App() {
       countdownTimer.current = setInterval(() => {
         setNextRefresh(prev => prev ? new Date(prev.getTime()) : null);
       }, 1000);
-      refreshTimer.current = setInterval(() => {
-        silentRefresh(lastFormData);
-      }, AUTO_REFRESH_INTERVAL);
-      return () => {
-        clearInterval(refreshTimer.current);
-        clearInterval(countdownTimer.current);
-      };
+      refreshTimer.current = setInterval(() => silentRefresh(lastFormData), AUTO_REFRESH_INTERVAL);
+      return () => { clearInterval(refreshTimer.current); clearInterval(countdownTimer.current); };
     }
   }, [lastFormData, results, silentRefresh]);
 
@@ -94,15 +87,13 @@ function App() {
     setLoading(true);
     setError(null);
     setResults(null);
+    setResultTab('overview');
     setLastFormData(formData);
     try {
       const res = await axios.post(`${API_BASE}/predict`, formData);
       setResults(res.data);
       setLastUpdated(new Date());
-      // Scroll to results
-      setTimeout(() => {
-        resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 100);
+      setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
     } catch (err) {
       setError(err.response?.data?.error || 'Prediction failed. Please try again.');
     } finally {
@@ -115,88 +106,63 @@ function App() {
     handlePredict(formData);
   };
 
+  const navItems = [
+    { key: 'predict', label: 'Predict', icon: '/' },
+    { key: 'connections', label: 'Connections' },
+    { key: 'dashboard', label: 'Dashboard' },
+    { key: 'alerts', label: 'Alerts' },
+    { key: 'accuracy', label: 'Accuracy' },
+  ];
+
   return (
     <div className="app">
+      {/* ── Header ── */}
       <header className="header">
         <div className="header-content">
-          <div className="logo">
-            <svg width="36" height="36" viewBox="0 0 36 36" fill="none" className="logo-icon">
-              <path d="M18 2L33 10V26L18 34L3 26V10L18 2Z" fill="#0ea5e9" opacity="0.15"/>
-              <path d="M8 20L16 12L28 8L24 20L16 24L8 20Z" fill="#0ea5e9"/>
-              <path d="M16 24L14 30L12 24" stroke="#0ea5e9" strokeWidth="1.5"/>
+          <div className="logo" onClick={() => { setActiveView('predict'); setMobileMenuOpen(false); }}>
+            <svg width="32" height="32" viewBox="0 0 36 36" fill="none">
+              <path d="M18 2L33 10V26L18 34L3 26V10L18 2Z" fill="var(--accent)" opacity="0.15"/>
+              <path d="M8 20L16 12L28 8L24 20L16 24L8 20Z" fill="var(--accent)"/>
+              <path d="M16 24L14 30L12 24" stroke="var(--accent)" strokeWidth="1.5"/>
             </svg>
-            <h1>Debbie's Lucky Flight Predictor</h1>
+            <h1>FlightRisk</h1>
           </div>
-          <nav className="header-nav">
-            <button
-              className={`nav-btn ${activeView === 'predict' ? 'active' : ''}`}
-              onClick={() => setActiveView('predict')}
-            >
-              Predict
-            </button>
-            <button
-              className={`nav-btn ${activeView === 'connections' ? 'active' : ''}`}
-              onClick={() => setActiveView('connections')}
-            >
-              Connections
-            </button>
-            <button
-              className={`nav-btn ${activeView === 'dashboard' ? 'active' : ''}`}
-              onClick={() => setActiveView('dashboard')}
-            >
-              Dashboard
-            </button>
-            <button
-              className={`nav-btn ${activeView === 'alerts' ? 'active' : ''}`}
-              onClick={() => setActiveView('alerts')}
-            >
-              Alerts
-            </button>
-            <button
-              className={`nav-btn ${activeView === 'accuracy' ? 'active' : ''}`}
-              onClick={() => setActiveView('accuracy')}
-            >
-              Accuracy
-            </button>
+
+          <nav className={`header-nav ${mobileMenuOpen ? 'open' : ''}`}>
+            {navItems.map(item => (
+              <button
+                key={item.key}
+                className={`nav-btn ${activeView === item.key ? 'active' : ''}`}
+                onClick={() => { setActiveView(item.key); setMobileMenuOpen(false); }}
+              >
+                {item.label}
+              </button>
+            ))}
           </nav>
+
           <div className="header-right">
-            <button
-              className="theme-toggle"
-              onClick={() => setDarkMode(!darkMode)}
-              title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-              aria-label="Toggle theme"
-            >
+            <button className="theme-toggle" onClick={() => setDarkMode(!darkMode)} aria-label="Toggle theme">
               {darkMode ? (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
               ) : (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
               )}
             </button>
-            <p className="tagline">ML-powered predictions with live data</p>
+            <button className="mobile-menu-btn" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label="Menu">
+              <span></span><span></span><span></span>
+            </button>
           </div>
         </div>
       </header>
 
+      {/* ── Main Content ── */}
       <main className="main">
         <div className="container">
-          {activeView === 'accuracy' && (
-            <ValidationDashboard />
-          )}
-
-          {activeView === 'connections' && (
-            <ConnectionAnalyzer airlines={airlines} airports={airports} />
-          )}
-
-          {activeView === 'alerts' && (
-            <AlertCenter airlines={airlines} airports={airports} />
-          )}
-
+          {activeView === 'accuracy' && <ValidationDashboard />}
+          {activeView === 'connections' && <ConnectionAnalyzer airlines={airlines} airports={airports} />}
+          {activeView === 'alerts' && <AlertCenter airlines={airlines} airports={airports} />}
           {activeView === 'dashboard' && (
-            <TripDashboard
-              airlines={airlines}
-              airports={airports}
-              onSelectFlight={handleDashboardSelect}
-            />
+            <TripDashboard airlines={airlines} airports={airports} onSelectFlight={handleDashboardSelect} />
           )}
 
           {activeView === 'predict' && (
@@ -204,14 +170,9 @@ function App() {
               <section className="form-section">
                 <div className="section-header">
                   <h2>Check Your Flight</h2>
-                  <p>Enter your flight details to get a delay & cancellation risk prediction</p>
+                  <p>Enter a flight code or fill in details manually</p>
                 </div>
-                <PredictionForm
-                  airlines={airlines}
-                  airports={airports}
-                  onSubmit={handlePredict}
-                  loading={loading}
-                />
+                <PredictionForm airlines={airlines} airports={airports} onSubmit={handlePredict} loading={loading} />
               </section>
 
               {error && (
@@ -226,27 +187,56 @@ function App() {
               <div ref={resultsRef}>
                 {results && !loading && (
                   <>
+                    {/* ── Auto Refresh ── */}
                     <AutoRefreshBar
-                      lastUpdated={lastUpdated}
-                      nextRefresh={nextRefresh}
-                      refreshing={refreshing}
-                      onManualRefresh={() => silentRefresh(lastFormData)}
+                      lastUpdated={lastUpdated} nextRefresh={nextRefresh}
+                      refreshing={refreshing} onManualRefresh={() => silentRefresh(lastFormData)}
                     />
+
+                    {/* ── Live Flight Status (if flight code provided) ── */}
                     {lastFormData?.flight_code && (
-                      <LiveFlightStatus
-                        flightCode={lastFormData.flight_code}
-                        flightDate={lastFormData.date}
-                      />
+                      <LiveFlightStatus flightCode={lastFormData.flight_code} flightDate={lastFormData.date} />
                     )}
-                    <ResultsDisplay results={results} />
-                    {lastFormData?.flight_code && (
-                      <AircraftTimeline
-                        flightCode={lastFormData.flight_code}
-                        flightDate={lastFormData.date}
-                      />
-                    )}
-                    <TrendCharts formData={lastFormData} />
-                    <Alternatives formData={lastFormData} />
+
+                    {/* ── HERO: Risk Summary ── */}
+                    <RiskHero results={results} />
+
+                    {/* ── Result Detail Tabs ── */}
+                    <div className="result-tabs">
+                      {[
+                        { key: 'overview', label: 'Details' },
+                        { key: 'weather', label: 'Weather' },
+                        { key: 'trends', label: 'Trends' },
+                        { key: 'alternatives', label: 'Alternatives' },
+                        ...(lastFormData?.flight_code ? [{ key: 'aircraft', label: 'Aircraft' }] : []),
+                      ].map(tab => (
+                        <button
+                          key={tab.key}
+                          className={`result-tab ${resultTab === tab.key ? 'active' : ''}`}
+                          onClick={() => setResultTab(tab.key)}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="result-tab-content">
+                      {resultTab === 'overview' && (
+                        <ResultsDisplay results={results} />
+                      )}
+                      {resultTab === 'weather' && results.live_data?.origin_weather && (
+                        <WeatherView results={results} />
+                      )}
+                      {resultTab === 'trends' && (
+                        <TrendCharts formData={lastFormData} />
+                      )}
+                      {resultTab === 'alternatives' && (
+                        <Alternatives formData={lastFormData} />
+                      )}
+                      {resultTab === 'aircraft' && lastFormData?.flight_code && (
+                        <AircraftTimeline flightCode={lastFormData.flight_code} flightDate={lastFormData.date} />
+                      )}
+                    </div>
                   </>
                 )}
               </div>
@@ -258,12 +248,8 @@ function App() {
       <footer className="footer">
         <div className="footer-content">
           <p className="methodology">
-            Predictions powered by XGBoost ensemble models trained on patterns from
-            Bureau of Transportation Statistics data, enhanced with live weather, FAA,
-            METAR, and news intelligence from {airports.length}+ airports and {airlines.length}+ airlines worldwide.
-          </p>
-          <p className="disclaimer">
-            For informational purposes only. Actual delays depend on real-time conditions.
+            Powered by XGBoost ML models, Bureau of Transportation Statistics data,
+            live weather, FAA, METAR, and news intelligence.
           </p>
         </div>
       </footer>
@@ -271,51 +257,139 @@ function App() {
   );
 }
 
+
+/* ── Risk Hero: The one thing you came for ── */
+function RiskHero({ results }) {
+  const { delay_probability, cancellation_probability, risk_level, flight_details, realtime_intel, live_data } = results;
+  const riskClass = risk_level.toLowerCase().replace(' ', '-');
+  const hasAlerts = realtime_intel && realtime_intel.signals_found > 0;
+
+  return (
+    <div className={`risk-hero risk-hero-${riskClass}`}>
+      <div className="risk-hero-left">
+        <div className="risk-hero-route">
+          {flight_details.origin} <span className="risk-hero-arrow">&rarr;</span> {flight_details.destination}
+        </div>
+        <div className="risk-hero-meta">
+          {flight_details.airline} &middot; {flight_details.date} &middot; {flight_details.departure_time}
+        </div>
+        {live_data?.sources && (
+          <div className="risk-hero-sources">
+            <span className="live-dot green"></span>
+            {live_data.sources.length} live sources
+          </div>
+        )}
+        {hasAlerts && (
+          <div className="risk-hero-alert">
+            <span className="live-dot"></span>
+            {realtime_intel.signals_found} disruption signal{realtime_intel.signals_found > 1 ? 's' : ''} detected
+          </div>
+        )}
+      </div>
+      <div className="risk-hero-right">
+        <div className="risk-hero-gauge">
+          <div className="risk-hero-pct">{delay_probability.toFixed(0)}%</div>
+          <div className="risk-hero-label">delay risk</div>
+        </div>
+        <div className="risk-hero-gauge risk-hero-gauge-secondary">
+          <div className="risk-hero-pct-sm">{cancellation_probability.toFixed(1)}%</div>
+          <div className="risk-hero-label">cancel risk</div>
+        </div>
+        <div className={`risk-hero-badge ${riskClass}`}>
+          {risk_level}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+/* ── Weather View (extracted from results) ── */
+function WeatherView({ results }) {
+  const { live_data, flight_details } = results;
+  if (!live_data) return null;
+
+  return (
+    <div className="weather-view">
+      <div className="weather-cards-row">
+        {live_data.origin_weather && (
+          <WeatherCard
+            title={`Origin: ${flight_details.origin.split(' - ')[0]}`}
+            data={live_data.origin_weather}
+            metar={live_data.origin_metar}
+            faa={live_data.origin_faa}
+          />
+        )}
+        {live_data.dest_weather && (
+          <WeatherCard
+            title={`Destination: ${flight_details.destination.split(' - ')[0]}`}
+            data={live_data.dest_weather}
+            metar={live_data.dest_metar}
+            faa={live_data.dest_faa}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+function WeatherCard({ title, data, metar, faa }) {
+  const severityColor = data.severity > 0.5 ? 'var(--red)' : data.severity > 0.25 ? 'var(--amber)' : 'var(--green)';
+  const catColors = { 'VFR': 'var(--green)', 'MVFR': 'var(--accent)', 'IFR': 'var(--red)', 'LIFR': '#ef4444' };
+
+  return (
+    <div className="weather-card">
+      <h4>{title}</h4>
+      <div className="weather-main">
+        <div className="weather-desc">{data.description}</div>
+        <div className="weather-temp">{data.temp_c}&deg;C</div>
+      </div>
+      <div className="weather-details">
+        <div className="weather-detail"><span className="wd-label">Wind</span><span className="wd-value">{data.wind_kmh} km/h</span></div>
+        <div className="weather-detail"><span className="wd-label">Gusts</span><span className="wd-value">{data.gusts_kmh} km/h</span></div>
+        <div className="weather-detail"><span className="wd-label">Visibility</span><span className="wd-value">{data.visibility_km} km</span></div>
+        <div className="weather-detail"><span className="wd-label">Precip</span><span className="wd-value">{data.precip_prob}%</span></div>
+      </div>
+      {metar && metar.is_live && (
+        <div className="metar-section">
+          <span className="metar-cat" style={{ background: catColors[metar.flight_category] || '#64748b' }}>{metar.flight_category}</span>
+          {metar.raw && <div className="metar-raw">{metar.raw}</div>}
+        </div>
+      )}
+      {faa && faa.programs && faa.programs.length > 0 && (
+        <div className="faa-section">
+          {faa.programs.map((p, i) => (
+            <div key={i} className="faa-program"><span className="faa-type">{p.type}</span><span className="faa-detail">{p.detail}</span></div>
+          ))}
+        </div>
+      )}
+      <div className="weather-severity-bar">
+        <div className="wsb-label">Flight Impact</div>
+        <div className="wsb-track"><div className="wsb-fill" style={{ width: `${Math.min(data.severity * 100, 100)}%`, background: severityColor }}></div></div>
+        <div className="wsb-value" style={{ color: severityColor }}>
+          {data.severity < 0.15 ? 'Minimal' : data.severity < 0.30 ? 'Low' : data.severity < 0.50 ? 'Moderate' : data.severity < 0.70 ? 'Significant' : 'Severe'}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function AutoRefreshBar({ lastUpdated, nextRefresh, refreshing, onManualRefresh }) {
   const [, forceUpdate] = useState(0);
-
-  useEffect(() => {
-    const tick = setInterval(() => forceUpdate(n => n + 1), 1000);
-    return () => clearInterval(tick);
-  }, []);
-
-  const timeAgo = lastUpdated
-    ? Math.round((Date.now() - lastUpdated.getTime()) / 1000)
-    : 0;
-
-  const secsUntil = nextRefresh
-    ? Math.max(0, Math.round((nextRefresh.getTime() - Date.now()) / 1000))
-    : 0;
-
-  const formatAgo = (secs) => {
-    if (secs < 5) return 'just now';
-    if (secs < 60) return `${secs}s ago`;
-    return `${Math.floor(secs / 60)}m ${secs % 60}s ago`;
-  };
-
-  const progress = nextRefresh
-    ? Math.max(0, Math.min(100, ((120 - secsUntil) / 120) * 100))
-    : 0;
+  useEffect(() => { const t = setInterval(() => forceUpdate(n => n + 1), 1000); return () => clearInterval(t); }, []);
+  const timeAgo = lastUpdated ? Math.round((Date.now() - lastUpdated.getTime()) / 1000) : 0;
+  const secsUntil = nextRefresh ? Math.max(0, Math.round((nextRefresh.getTime() - Date.now()) / 1000)) : 0;
+  const formatAgo = (s) => s < 5 ? 'just now' : s < 60 ? `${s}s ago` : `${Math.floor(s/60)}m ago`;
+  const progress = nextRefresh ? Math.max(0, Math.min(100, ((120 - secsUntil) / 120) * 100)) : 0;
 
   return (
     <div className="auto-refresh-bar">
-      <div className="arb-left">
-        <span className={`arb-dot ${refreshing ? 'refreshing' : ''}`}></span>
-        <span className="arb-text">
-          {refreshing ? 'Refreshing live data...' : `Updated ${formatAgo(timeAgo)}`}
-        </span>
-      </div>
-      <div className="arb-center">
-        <div className="arb-progress-track">
-          <div className="arb-progress-fill" style={{ width: `${progress}%` }}></div>
-        </div>
-        <span className="arb-countdown">
-          {secsUntil > 0 ? `Next refresh in ${secsUntil}s` : 'Refreshing...'}
-        </span>
-      </div>
-      <button className="arb-refresh-btn" onClick={onManualRefresh} disabled={refreshing}>
-        &#8635; Refresh Now
-      </button>
+      <span className={`arb-dot ${refreshing ? 'refreshing' : ''}`}></span>
+      <span className="arb-text">{refreshing ? 'Refreshing...' : `Updated ${formatAgo(timeAgo)}`}</span>
+      <div className="arb-progress-track"><div className="arb-progress-fill" style={{ width: `${progress}%` }}></div></div>
+      <button className="arb-refresh-btn" onClick={onManualRefresh} disabled={refreshing}>Refresh</button>
     </div>
   );
 }
