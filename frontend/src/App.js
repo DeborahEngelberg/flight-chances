@@ -12,6 +12,7 @@ import ConnectionAnalyzer from './components/ConnectionAnalyzer';
 import AircraftTimeline from './components/AircraftTimeline';
 import AlertCenter from './components/AlertCenter';
 import LiveFlightStatus from './components/LiveFlightStatus';
+import RiskGauge from './components/RiskGauge';
 import './App.css';
 
 const AUTO_REFRESH_INTERVAL = 120000;
@@ -258,45 +259,99 @@ function App() {
 }
 
 
-/* ── Risk Hero: The one thing you came for ── */
+/* ── Risk Hero with dual gauges ── */
 function RiskHero({ results }) {
-  const { delay_probability, cancellation_probability, risk_level, flight_details, realtime_intel, live_data } = results;
+  const { delay_probability, cancellation_probability, risk_level, flight_details, realtime_intel, live_data, historical_stats, calibration } = results;
   const riskClass = risk_level.toLowerCase().replace(' ', '-');
   const hasAlerts = realtime_intel && realtime_intel.signals_found > 0;
 
+  // Generate a plain-English summary
+  const getSummary = () => {
+    const dp = delay_probability;
+    const cp = cancellation_probability;
+    if (dp < 15 && cp < 2) return "This flight looks great. Low risk across the board — travel with confidence.";
+    if (dp < 25 && cp < 3) return "Solid odds. Minor delay possible but unlikely to disrupt your plans.";
+    if (dp < 35 && cp < 5) return "Moderate risk. Allow extra buffer time, especially for connections.";
+    if (dp < 50) return "Elevated delay risk. Consider an earlier flight or have a backup plan ready.";
+    if (dp < 65) return "High delay risk. Expect disruptions. Download your airline's app for live updates.";
+    return "Very high risk of significant delays or cancellation. Strongly consider rebooking.";
+  };
+
   return (
     <div className={`risk-hero risk-hero-${riskClass}`}>
-      <div className="risk-hero-left">
-        <div className="risk-hero-route">
-          {flight_details.origin} <span className="risk-hero-arrow">&rarr;</span> {flight_details.destination}
-        </div>
-        <div className="risk-hero-meta">
-          {flight_details.airline} &middot; {flight_details.date} &middot; {flight_details.departure_time}
-        </div>
-        {live_data?.sources && (
-          <div className="risk-hero-sources">
-            <span className="live-dot green"></span>
-            {live_data.sources.length} live sources
+      {/* ── Flight info ── */}
+      <div className="risk-hero-top">
+        <div className="risk-hero-route-section">
+          <div className={`risk-hero-badge ${riskClass}`}>{risk_level} Risk</div>
+          <div className="risk-hero-route">
+            {flight_details.origin} <span className="risk-hero-arrow">&rarr;</span> {flight_details.destination}
           </div>
-        )}
-        {hasAlerts && (
-          <div className="risk-hero-alert">
-            <span className="live-dot"></span>
-            {realtime_intel.signals_found} disruption signal{realtime_intel.signals_found > 1 ? 's' : ''} detected
+          <div className="risk-hero-meta">
+            {flight_details.airline} &middot; {flight_details.day}, {flight_details.date} &middot; {flight_details.departure_time}
           </div>
-        )}
+        </div>
+        <div className="risk-hero-badges">
+          {live_data?.sources && (
+            <div className="risk-hero-source-badge">
+              <span className="live-dot green"></span>
+              {live_data.sources.length} live sources
+            </div>
+          )}
+          {hasAlerts && (
+            <div className="risk-hero-alert-badge">
+              <span className="live-dot"></span>
+              {realtime_intel.signals_found} disruption{realtime_intel.signals_found > 1 ? 's' : ''}
+            </div>
+          )}
+          {calibration?.applied && (
+            <div className="risk-hero-calib-badge">Self-calibrated</div>
+          )}
+        </div>
       </div>
-      <div className="risk-hero-right">
-        <div className="risk-hero-gauge">
-          <div className="risk-hero-pct">{delay_probability.toFixed(0)}%</div>
-          <div className="risk-hero-label">delay risk</div>
+
+      {/* ── Dual gauges ── */}
+      <div className="risk-hero-gauges">
+        <div className="risk-hero-gauge-card">
+          <div className="rhg-label">Delay Probability</div>
+          <RiskGauge percentage={delay_probability} />
+          <div className="rhg-sublabel">
+            {delay_probability < 20 ? 'On-time likely' :
+             delay_probability < 35 ? 'Minor delays possible' :
+             delay_probability < 50 ? 'Delays expected' :
+             'Significant delays likely'}
+          </div>
         </div>
-        <div className="risk-hero-gauge risk-hero-gauge-secondary">
-          <div className="risk-hero-pct-sm">{cancellation_probability.toFixed(1)}%</div>
-          <div className="risk-hero-label">cancel risk</div>
+        <div className="risk-hero-divider"></div>
+        <div className="risk-hero-gauge-card">
+          <div className="rhg-label">Cancellation Probability</div>
+          <RiskGauge percentage={cancellation_probability} />
+          <div className="rhg-sublabel">
+            {cancellation_probability < 2 ? 'Very unlikely' :
+             cancellation_probability < 5 ? 'Unlikely' :
+             cancellation_probability < 10 ? 'Possible' :
+             'Elevated risk'}
+          </div>
         </div>
-        <div className={`risk-hero-badge ${riskClass}`}>
-          {risk_level}
+      </div>
+
+      {/* ── Plain-English summary ── */}
+      <div className="risk-hero-summary">
+        {getSummary()}
+      </div>
+
+      {/* ── Quick stats bar ── */}
+      <div className="risk-hero-stats">
+        <div className="rhs-item">
+          <span className="rhs-value">{historical_stats.on_time_percentage}%</span>
+          <span className="rhs-label">Route on-time</span>
+        </div>
+        <div className="rhs-item">
+          <span className="rhs-value">{historical_stats.avg_delay_minutes} min</span>
+          <span className="rhs-label">Avg delay</span>
+        </div>
+        <div className="rhs-item">
+          <span className="rhs-value">{historical_stats.distance_miles.toLocaleString()} mi</span>
+          <span className="rhs-label">Distance</span>
         </div>
       </div>
     </div>

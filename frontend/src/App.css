@@ -424,55 +424,91 @@ body {
    RISK HERO — The big moment
    ═══════════════════════════════════════════════════════════════════ */
 .risk-hero {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-lg);
-  padding: 32px 36px;
+  padding: 0;
   margin-bottom: 16px;
   animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-  gap: 24px;
-  border-left: 4px solid var(--text-muted);
+  overflow: hidden;
+  border-top: 4px solid var(--text-muted);
 }
-.risk-hero-low { border-left-color: var(--green); }
-.risk-hero-moderate { border-left-color: var(--amber); }
-.risk-hero-high { border-left-color: var(--orange); }
-.risk-hero-very-high { border-left-color: var(--red); }
+.risk-hero-low { border-top-color: var(--green); }
+.risk-hero-moderate { border-top-color: var(--amber); }
+.risk-hero-high { border-top-color: var(--orange); }
+.risk-hero-very-high { border-top-color: var(--red); }
 
-.risk-hero-left { flex: 1; min-width: 0; }
-.risk-hero-route { font-size: 1.6rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.5px; }
-.risk-hero-arrow { color: var(--text-muted); margin: 0 4px; }
-.risk-hero-meta { font-size: 0.85rem; color: var(--text-tertiary); margin-top: 4px; }
-.risk-hero-sources { display: inline-flex; align-items: center; gap: 6px; font-size: 0.72rem; color: var(--green); margin-top: 10px; }
-.risk-hero-alert { display: inline-flex; align-items: center; gap: 6px; font-size: 0.72rem; color: var(--red); margin-top: 6px; margin-left: 12px; }
-
-.risk-hero-right { display: flex; align-items: center; gap: 20px; flex-shrink: 0; }
-.risk-hero-gauge { text-align: center; }
-.risk-hero-pct { font-size: 3rem; font-weight: 800; letter-spacing: -2px; line-height: 1; }
-.risk-hero-low .risk-hero-pct { color: var(--green); }
-.risk-hero-moderate .risk-hero-pct { color: var(--amber); }
-.risk-hero-high .risk-hero-pct { color: var(--orange); }
-.risk-hero-very-high .risk-hero-pct { color: var(--red); }
-.risk-hero-pct-sm { font-size: 1.5rem; font-weight: 700; color: var(--text-tertiary); letter-spacing: -0.5px; }
-.risk-hero-label { font-size: 0.62rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin-top: 2px; }
-.risk-hero-gauge-secondary { opacity: 0.7; }
+/* Top section: route info + badges */
+.risk-hero-top {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  padding: 28px 32px 0; gap: 16px; flex-wrap: wrap;
+}
+.risk-hero-route-section { flex: 1; min-width: 0; }
 .risk-hero-badge {
-  padding: 8px 18px; border-radius: 14px; font-size: 0.78rem;
-  font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap;
+  display: inline-block; padding: 5px 14px; border-radius: 10px; font-size: 0.72rem;
+  font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;
 }
 .risk-hero-badge.low { background: var(--green-dim); color: var(--green); border: 1px solid var(--green-border); }
 .risk-hero-badge.moderate { background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber-border); }
 .risk-hero-badge.high { background: rgba(234,88,12,0.08); color: var(--orange); border: 1px solid rgba(234,88,12,0.15); }
 .risk-hero-badge.very-high { background: var(--red-dim); color: var(--red); border: 1px solid var(--red-border); }
 
+.risk-hero-route { font-size: 1.5rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.5px; }
+.risk-hero-arrow { color: var(--text-muted); margin: 0 4px; }
+.risk-hero-meta { font-size: 0.82rem; color: var(--text-tertiary); margin-top: 4px; }
+
+.risk-hero-badges { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; flex-shrink: 0; }
+.risk-hero-source-badge, .risk-hero-alert-badge, .risk-hero-calib-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 0.68rem; font-weight: 600; padding: 4px 10px;
+  border-radius: 8px; white-space: nowrap;
+}
+.risk-hero-source-badge { color: var(--green); background: var(--green-dim); border: 1px solid var(--green-border); }
+.risk-hero-alert-badge { color: var(--red); background: var(--red-dim); border: 1px solid var(--red-border); }
+.risk-hero-calib-badge { color: var(--accent); background: var(--accent-glow); border: 1px solid rgba(14,165,233,0.12); }
+
+/* Dual gauges */
+.risk-hero-gauges {
+  display: grid; grid-template-columns: 1fr auto 1fr;
+  padding: 24px 32px; gap: 0; align-items: center;
+}
+.risk-hero-gauge-card { text-align: center; padding: 8px 12px; }
+.risk-hero-divider { width: 1px; height: 80px; background: var(--border-subtle); }
+.rhg-label {
+  font-size: 0.68rem; font-weight: 700; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px;
+}
+.rhg-sublabel {
+  font-size: 0.78rem; color: var(--text-tertiary); margin-top: 4px; font-weight: 500;
+}
+
+/* Summary sentence */
+.risk-hero-summary {
+  padding: 0 32px 20px; font-size: 0.88rem; color: var(--text-secondary);
+  line-height: 1.5; text-align: center;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* Quick stats bar */
+.risk-hero-stats {
+  display: flex; padding: 14px 32px; gap: 0;
+}
+.rhs-item {
+  flex: 1; text-align: center; padding: 0 12px;
+  border-right: 1px solid var(--border-subtle);
+}
+.rhs-item:last-child { border-right: none; }
+.rhs-value { font-size: 0.9rem; font-weight: 700; color: var(--text-primary); display: block; }
+.rhs-label { font-size: 0.62rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
+
 @media (max-width: 600px) {
-  .risk-hero { flex-direction: column; text-align: center; padding: 24px 20px; }
-  .risk-hero-right { justify-content: center; }
-  .risk-hero-route { font-size: 1.3rem; }
-  .risk-hero-pct { font-size: 2.4rem; }
+  .risk-hero-top { flex-direction: column; padding: 20px 20px 0; }
+  .risk-hero-badges { flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
+  .risk-hero-gauges { padding: 20px; }
+  .risk-hero-route { font-size: 1.25rem; }
+  .risk-hero-summary { padding: 0 20px 16px; font-size: 0.82rem; }
+  .risk-hero-stats { padding: 12px 20px; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════
