@@ -13,7 +13,8 @@ function SearchableSelect({ options, value, onChange, placeholder, formatOption,
 
   const filtered = search
     ? options.filter(o => {
-        const text = (formatOption ? formatOption(o) : o.label || '').toLowerCase();
+        // Search against the plain text label, not the JSX formatted version
+        const text = (o.label + ' ' + (o.extra || '') + ' ' + (o.value || '')).toLowerCase();
         return text.includes(search.toLowerCase());
       })
     : options;
